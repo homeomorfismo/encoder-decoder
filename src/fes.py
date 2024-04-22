@@ -57,7 +57,7 @@ def convection_diffusion(
     a += scalar_coeff * u * v * dx
     m = BilinearForm(fes)
     m += u * v * dx
-    assemble(a, m)
+    # assemble(a, m)
     return a, m, fes
 
 
