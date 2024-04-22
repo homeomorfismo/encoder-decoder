@@ -20,6 +20,8 @@ class PseudoVcycle(keras.Model):
         num_levels: int = 1,
         compression_factor: float = 2.0,
         regularizer: float = 1.0,
+        use_bias: bool = False,
+        dtype="float32",
     ):
         """
         Constructor for the PseudoVcycle model.
@@ -32,15 +34,38 @@ class PseudoVcycle(keras.Model):
 
         self._name = "PseudoVcycle"
 
+        # TODO successive compression factors!
         self.num_levels = num_levels
-        self._input_shape = input_shape
-        # self._output_shape = input_shape
-
         self.compression_factor = compression_factor
+        self._input_shape = input_shape
+
+        self.lin_shape = 1
+        if len(self._input_shape) > 1:
+            for size in self._input_shape:
+                self.lin_shape *= size
+        elif len(self._input_shape) == 1:
+            self.lin_shape = self._input_shape[0]
+        else:
+            raise ValueError(f"Invalid input shape: {self._input_shape}")
+
+        # TODO Generate a list of encoding dimensions!
+        self.encoding_dim = int(self.lin_shape // self.compression_factor)
+
         self.regularizer = regularizer
+        self.use_bias = use_bias
+
+        self._dtype = dtype
 
         self.encoder = self.build_encoder()
         self.decoder = self.build_decoder()
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @dtype.setter
+    def dtype(self, dtype):
+        self._dtype = dtype
 
     def build_encoder(self):
         """
@@ -49,29 +74,23 @@ class PseudoVcycle(keras.Model):
         Returns:
             keras.Model: The encoder model.
         """
-        if len(self._input_shape) == 2:
-            lin_shape = self._input_shape[0] * self._input_shape[1]  # Matrix shape
-        else:
-            lin_shape = self._input_shape[0]
-        final_encoding_dim = int(lin_shape / self.compression_factor)
-
-        # inputs = keras.Input(shape=(lin_shape,))
         inputs = keras.Input(shape=self._input_shape)
         x = inputs
 
         encoder_layers = []
 
-        # Flatten the input tensor
-        x = layers.Reshape((lin_shape,), name="reshape")(x)
-        encoder_layers.append(x)
+        # x = layers.Reshape((self.lin_shape,), name="reshape")(x)
+        # encoder_layers.append(x)
 
         for i in range(self.num_levels):
             x = layers.Dense(
-                final_encoding_dim,
+                self.encoding_dim,
                 activation="relu",
                 kernel_regularizer=regularizers.l1(self.regularizer),
+                use_bias=self.use_bias,
                 bias_regularizer=regularizers.l1(self.regularizer),
                 name=f"encoder_{i}",
+                dtype=self._dtype,
             )(x)
             encoder_layers.append(x)
 
@@ -84,32 +103,29 @@ class PseudoVcycle(keras.Model):
         Returns:
             keras.Model: The decoder model.
         """
-        if len(self._input_shape) == 2:
-            lin_shape = self._input_shape[0] * self._input_shape[1]  # Matrix shape
-        else:
-            lin_shape = self._input_shape[0]
-        final_encoding_dim = int(lin_shape / self.compression_factor)
-
-        inputs = keras.Input(shape=(final_encoding_dim,))
+        inputs = keras.Input(shape=(self.encoding_dim,))
         x = inputs
 
         decoder_layers = []
 
         for i in range(self.num_levels):
             x = layers.Dense(
-                lin_shape,
+                self.lin_shape,
                 activation="relu",
                 kernel_regularizer=SymL1Regularization(
-                    self.regularizer, self.encoder.layers[i + 2].get_weights()[0]
+                    # self.regularizer, self.encoder.layers[i + 2].get_weights()[0]
+                    self.regularizer,
+                    self.encoder.layers[i + 1].get_weights()[0],
                 ),
+                use_bias=self.use_bias,
                 bias_regularizer=regularizers.l1(self.regularizer),
                 name=f"decoder_{i}",
+                dtype=self._dtype,
             )(x)
             decoder_layers.append(x)
 
-        # Reshape the output tensor
-        x = layers.Reshape(self._input_shape, name="reshape")(x)
-        decoder_layers.append(x)
+        # x = layers.Reshape(self._input_shape, name="reshape")(x)
+        # decoder_layers.append(x)
 
         return keras.Model(inputs, decoder_layers, name="decoder")
 
@@ -137,15 +153,3 @@ if __name__ == "__main__":
     print(model.summary())
     print(model.encoder.summary())
     print(model.decoder.summary())
-
-    print("\nEncoder:")
-    for layer in model.encoder.layers:
-        print(f"{layer.name}")
-
-    print("\nDecoder:")
-    for layer in model.decoder.layers:
-        print(f"{layer.name}")
-
-    print("\nModel:")
-    for layer in model.layers:
-        print(f"{layer.name}")
