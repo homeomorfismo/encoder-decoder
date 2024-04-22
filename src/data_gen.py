@@ -87,7 +87,8 @@ class LaplaceDGen(DataGenerator):
                 )
             else:
                 raise ValueError("Not implemented for dimensions > 3.")
-            x_data[i] = self.precond * (self.laplace.mat * gf.vec)
+            x_data[i] = gf.vec
+            x_data[i] += self.precond * (self.laplace.mat * gf.vec)
         return multivec_to_numpy(x_data)
 
     def from_random(self, num_samples: int):
