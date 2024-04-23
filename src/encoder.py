@@ -6,6 +6,9 @@ V-Cycle in a Multigrid solver.
 import keras
 from keras import layers
 from keras import regularizers
+from keras.datasets import mnist
+import numpy as np
+import matplotlib.pyplot as plt
 from metrics import SymL1Regularization
 
 
@@ -148,8 +151,57 @@ class PseudoVcycle(keras.Model):
 
 
 if __name__ == "__main__":
-    model = PseudoVcycle(input_shape=(32, 32))
-    model.build((None, 32 * 32))
-    print(model.summary())
-    print(model.encoder.summary())
-    print(model.decoder.summary())
+    # see https://blog.keras.io/building-autoencoders-in-keras.html
+    encoding_dim = 32
+    input_shape = (784,)
+    num_levels = 1
+    compression_factor = 24.5
+    regularizer = 1e-3
+    use_bias = False
+
+    model = PseudoVcycle(
+        input_shape=input_shape,
+        num_levels=num_levels,
+        compression_factor=compression_factor,
+        regularizer=regularizer,
+        use_bias=use_bias,
+    )
+    model.compile(optimizer="adam", loss="mean_absolute_error")
+
+    (x_train, _), (x_test, _) = mnist.load_data()
+
+    x_train = x_train.astype("float32") / 255.0
+    x_test = x_test.astype("float32") / 255.0
+
+    x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
+    x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
+
+    model.fit(
+        x_train,
+        x_train,
+        epochs=50,
+        batch_size=256,
+        shuffle=True,
+        validation_data=(x_test, x_test),
+    )
+
+    encoded_imgs = model.encoder.predict(x_test)
+    decoded_imgs = model.decoder.predict(encoded_imgs)
+
+    n = 10
+    plt.figure(figsize=(20, 4))
+    for i in range(n):
+        # display original
+        ax = plt.subplot(2, n, i + 1)
+        plt.imshow(x_test[i].reshape(28, 28))
+        plt.gray()
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+
+        # display reconstruction
+        ax = plt.subplot(2, n, i + 1 + n)
+        plt.imshow(decoded_imgs[i].reshape(28, 28))
+        plt.gray()
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+    plt.show()
