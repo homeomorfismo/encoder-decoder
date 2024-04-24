@@ -7,9 +7,12 @@ import keras
 from keras import layers
 from keras import regularizers
 from keras.datasets import mnist
+from keras import ops
 import numpy as np
 import matplotlib.pyplot as plt
-from metrics import SymL1Regularization
+
+# from metrics import SymL1Regularization
+from metrics_new import SymIdL1Regularization
 
 
 class PseudoVcycle(keras.Model):
@@ -115,8 +118,7 @@ class PseudoVcycle(keras.Model):
             x = layers.Dense(
                 self.lin_shape,
                 activation="relu",
-                kernel_regularizer=SymL1Regularization(
-                    # self.regularizer, self.encoder.layers[i + 2].get_weights()[0]
+                kernel_regularizer=SymIdL1Regularization(
                     self.regularizer,
                     self.encoder.layers[i + 1].get_weights()[0],
                 ),
@@ -155,8 +157,8 @@ if __name__ == "__main__":
     encoding_dim = 32
     input_shape = (784,)
     num_levels = 1
-    compression_factor = 24.5
-    regularizer = 1e-3
+    compression_factor = 10.0
+    regularizer = 1.0e-4
     use_bias = False
 
     model = PseudoVcycle(
@@ -205,3 +207,34 @@ if __name__ == "__main__":
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
     plt.show()
+    input("Press Enter to continue...")
+
+    # Use matplotlib.pyplot.spy to visualize the weights of the encoder
+    # and decoder models.
+    for i in range(1, num_levels + 1):
+        plt.figure(figsize=(10, 10))
+        plt.spy(model.encoder.layers[i].get_weights()[0], markersize=1)
+        plt.title(f"Encoder Layer {i}")
+        plt.show()
+        input("\tPress Enter to continue...")
+
+        plt.figure(figsize=(10, 10))
+        plt.spy(model.decoder.layers[i].get_weights()[0], markersize=1)
+        plt.title(f"Decoder Layer {i}")
+        plt.show()
+        input("\tPress Enter to continue...")
+
+    # Compute the difference between the encoder and decoder weights.
+    # Use numpy.allclose to check if the weights are equal.
+    for i in range(1, num_levels + 1):
+        diff_1 = (
+            ops.transpose(model.encoder.layers[i].get_weights()[0])
+            - model.decoder.layers[i].get_weights()[0]
+        )
+        print(f"Layer {i} Difference: {np.allclose(diff_1, np.zeros(diff_1.shape))}")
+        diff_2 = ops.matmul(
+            model.encoder.layers[i].get_weights()[0],
+            model.decoder.layers[i].get_weights()[0],
+        ) - np.eye(model.encoder.layers[i].get_weights()[0].shape[0])
+        print(f"Layer {i} Difference: {np.allclose(diff_2, np.zeros(diff_2.shape))}")
+        input("\tPress Enter to continue...")
