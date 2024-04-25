@@ -11,9 +11,8 @@ from keras import ops
 import numpy as np
 import matplotlib.pyplot as plt
 
-# from metrics import SymL1Regularization
 from layers import LinearDense
-from metrics_new import SymIdL1Regularization
+from metrics import SymIdL1Regularization
 
 
 class PseudoVcycle(keras.Model):
@@ -43,8 +42,8 @@ class PseudoVcycle(keras.Model):
 
         self._input_shape = input_shape
         self.num_levels = num_levels
-        # self.compression_factor = compression_factor
         self.inner_shape = int(input_shape[-1] // compression_factor)
+        # self.inner_shapes = [int(input_shape[-1] // (compression_factor ** j)) for j in range(1, num_levels + 1)]
         self.reg_param = reg_param
         self.use_bias = use_bias
         self._dtype = dtype
@@ -78,8 +77,10 @@ class PseudoVcycle(keras.Model):
         for j in range(self.num_levels):
             x = LinearDense(
                 self.inner_shape,
+                # self.inner_shapes[j],
                 name=f"encoder_{j}",
-                # kernel_regularizer=regularizers.L1(self.reg_param),
+                kernel_regularizer=regularizers.L1(self.reg_param),
+                initializer="glorot_uniform",
             )(x)
             encoder_layers.append(x)
 
@@ -93,6 +94,7 @@ class PseudoVcycle(keras.Model):
             keras.Model: The decoder model.
         """
         inputs = keras.Input(shape=(self.inner_shape,))
+        # inputs = keras.Input(shape=(self.inner_shapes[-1],))
         x = inputs
 
         decoder_layers = []
@@ -100,10 +102,12 @@ class PseudoVcycle(keras.Model):
         for j in range(1, self.num_levels + 1):
             x = LinearDense(
                 self._input_shape[-1],
+                # self.inner_shapes[-j+1],
                 name=f"decoder_{j}",
-                # kernel_regularizer=SymIdL1Regularization(
-                #     self.reg_param, self.encoder.layers[j].get_weights()[0]
-                # ),
+                kernel_regularizer=SymIdL1Regularization(
+                    self.reg_param, self.encoder.layers[j].get_weights()[0]
+                ),
+                initializer="zeros",
             )(x)
             decoder_layers.append(x)
 
@@ -132,7 +136,7 @@ if __name__ == "__main__":
     INPUT_SHAPE = (784,)
     NUM_LEVELS = 1
     COMPRESSION_FACTOR = 24.5
-    REG_PARAM = 1.0e-2
+    REG_PARAM = 1.0e-4
     USE_BIAS = False
 
     model = PseudoVcycle(
