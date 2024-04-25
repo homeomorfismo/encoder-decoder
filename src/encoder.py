@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from layers import LinearDense
-from metrics import SymIdL1Regularization
+from regularizers import SymIdL1Regularization
 from initializers import MatrixInitializer
 
 
@@ -254,18 +254,38 @@ class PseudoMG(keras.Model):
 
         return keras.Model(inputs, range_space_layers, name="range_space")
 
+    def call(self, inputs, training=None):
+        """
+        Call the model.
 
-if __name__ == "__main__":
-    # see https://blog.keras.io/building-autoencoders-in-keras.html
-    ENCODING_DIM = 32
-    INPUT_SHAPE = (784,)
-    NUM_LEVELS = 1
-    COMPRESSION_FACTOR = 24.5
-    REG_PARAM = 1.0e-4
-    USE_BIAS = False
-    DTYPE = "float32"
-    # DTYPE = tf.complex64
+        Args:
+            inputs (tf.Tensor): Input tensor.
+            training (bool): Whether the model is training.
+            mask (tf.Tensor): Mask tensor.
 
+        Returns:
+            tf.Tensor: Output tensor.
+        """
+        x = self.encoder(inputs, training=training)
+        x = self.decoder(x, training=training)
+        x = self.range_space(x, training=False)
+        return x
+
+
+# see https://blog.keras.io/building-autoencoders-in-keras.html
+ENCODING_DIM = 32
+INPUT_SHAPE = (784,)
+NUM_LEVELS = 1
+COMPRESSION_FACTOR = 24.5
+REG_PARAM = 1.0e-4
+USE_BIAS = False
+DTYPE = "float32"
+
+
+def test_pseudo_vcycle():
+    """
+    Test the PseudoVcycle model. Use the MNIST dataset.
+    """
     model = PseudoVcycle(
         input_shape=INPUT_SHAPE,
         num_levels=NUM_LEVELS,
@@ -313,34 +333,62 @@ if __name__ == "__main__":
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
     plt.show()
-    input("Press Enter to continue...")
 
-    # Use matplotlib.pyplot.spy to visualize the weights of the encoder
-    # and decoder models.
-    for i in range(1, NUM_LEVELS + 1):
-        plt.figure(figsize=(10, 10))
-        plt.spy(model.encoder.layers[i].get_weights()[0], markersize=1)
-        plt.title(f"Encoder Layer {i}")
-        plt.show()
-        input("\tPress Enter to continue...")
 
-        plt.figure(figsize=(10, 10))
-        plt.spy(model.decoder.layers[i].get_weights()[0], markersize=1)
-        plt.title(f"Decoder Layer {i}")
-        plt.show()
-        input("\tPress Enter to continue...")
+def test_pseudo_mg():
+    """
+    Test the PseudoMG model. Use the MNIST dataset.
+    """
+    model = PseudoMG(
+        input_shape=INPUT_SHAPE,
+        matrix=ops.eye(784),
+        num_levels=NUM_LEVELS,
+        compression_factor=COMPRESSION_FACTOR,
+        reg_param=REG_PARAM,
+        use_bias=USE_BIAS,
+        dtype=DTYPE,
+    )
+    model.compile(optimizer="adam", loss="mean_absolute_error")
 
-    # Compute the difference between the encoder and decoder weights.
-    # Use numpy.allclose to check if the weights are equal.
-    for i in range(1, NUM_LEVELS + 1):
-        diff_1 = (
-            ops.transpose(model.encoder.layers[i].get_weights()[0])
-            - model.decoder.layers[i].get_weights()[0]
-        )
-        print(f"Layer {i} Difference: {np.allclose(diff_1, np.zeros(diff_1.shape))}")
-        diff_2 = ops.matmul(
-            model.encoder.layers[i].get_weights()[0],
-            model.decoder.layers[i].get_weights()[0],
-        ) - np.eye(model.encoder.layers[i].get_weights()[0].shape[0])
-        print(f"Layer {i} Difference: {np.allclose(diff_2, np.zeros(diff_2.shape))}")
-        input("\tPress Enter to continue...")
+    (x_train, _), (x_test, _) = mnist.load_data()
+
+    x_train = x_train.astype("float32") / 255.0
+    x_test = x_test.astype("float32") / 255.0
+
+    x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
+    x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
+
+    model.fit(
+        x_train,
+        x_train,
+        epochs=50,
+        batch_size=256,
+        shuffle=True,
+        validation_data=(x_test, x_test),
+    )
+
+    encoded_imgs = model.encoder.predict(x_test)
+    decoded_imgs = model.decoder.predict(encoded_imgs)
+
+    N = 10
+    plt.figure(figsize=(20, 4))
+    for i in range(N):
+        # display original
+        ax = plt.subplot(2, N, i + 1)
+        plt.imshow(x_test[i].reshape(28, 28))
+        plt.gray()
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+
+        # display reconstruction
+        ax = plt.subplot(2, N, i + 1 + N)
+        plt.imshow(decoded_imgs[i].reshape(28, 28))
+        plt.gray()
+        ax.get_xaxis().set_visible(False)
+        ax.get_yaxis().set_visible(False)
+    plt.show()
+
+
+if __name__ == "__main__":
+    test_pseudo_vcycle()
+    test_pseudo_mg()

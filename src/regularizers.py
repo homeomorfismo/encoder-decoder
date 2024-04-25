@@ -1,5 +1,5 @@
 """
-This file contains the custom metrics that are used in the model.
+This file contains custom regularizers for symmetric and identity matrices.
 """
 
 from keras.metrics import Metric
