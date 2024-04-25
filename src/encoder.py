@@ -91,7 +91,7 @@ class PseudoVcycle(keras.Model):
         for i in range(self.num_levels):
             x = layers.Dense(
                 self.encoding_dim,
-                activation="relu",
+                activation="linear",
                 kernel_regularizer=regularizers.l1(self.regularizer),
                 use_bias=self.use_bias,
                 bias_regularizer=regularizers.l1(self.regularizer),
@@ -117,7 +117,7 @@ class PseudoVcycle(keras.Model):
         for i in range(self.num_levels):
             x = layers.Dense(
                 self.lin_shape,
-                activation="relu",
+                activation="linear",
                 kernel_regularizer=SymIdL1Regularization(
                     self.regularizer,
                     self.encoder.layers[i + 1].get_weights()[0],
@@ -157,7 +157,7 @@ if __name__ == "__main__":
     encoding_dim = 32
     input_shape = (784,)
     num_levels = 1
-    compression_factor = 10.0
+    compression_factor = 24.5
     regularizer = 1.0e-4
     use_bias = False
 
