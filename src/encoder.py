@@ -12,6 +12,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # from metrics import SymL1Regularization
+from layers import LinearDense
 from metrics_new import SymIdL1Regularization
 
 
@@ -25,7 +26,7 @@ class PseudoVcycle(keras.Model):
         input_shape: tuple,
         num_levels: int = 1,
         compression_factor: float = 2.0,
-        regularizer: float = 1.0,
+        reg_param: float = 1.0e-4,
         use_bias: bool = False,
         dtype="float32",
     ):
@@ -40,26 +41,12 @@ class PseudoVcycle(keras.Model):
 
         self._name = "PseudoVcycle"
 
-        # TODO successive compression factors!
-        self.num_levels = num_levels
-        self.compression_factor = compression_factor
         self._input_shape = input_shape
-
-        self.lin_shape = 1
-        if len(self._input_shape) > 1:
-            for size in self._input_shape:
-                self.lin_shape *= size
-        elif len(self._input_shape) == 1:
-            self.lin_shape = self._input_shape[0]
-        else:
-            raise ValueError(f"Invalid input shape: {self._input_shape}")
-
-        # TODO Generate a list of encoding dimensions!
-        self.encoding_dim = int(self.lin_shape // self.compression_factor)
-
-        self.regularizer = regularizer
+        self.num_levels = num_levels
+        # self.compression_factor = compression_factor
+        self.inner_shape = int(input_shape[-1] // compression_factor)
+        self.reg_param = reg_param
         self.use_bias = use_bias
-
         self._dtype = dtype
 
         self.encoder = self.build_encoder()
@@ -88,15 +75,11 @@ class PseudoVcycle(keras.Model):
         # x = layers.Reshape((self.lin_shape,), name="reshape")(x)
         # encoder_layers.append(x)
 
-        for i in range(self.num_levels):
-            x = layers.Dense(
-                self.encoding_dim,
-                activation="linear",
-                kernel_regularizer=regularizers.l1(self.regularizer),
-                use_bias=self.use_bias,
-                bias_regularizer=regularizers.l1(self.regularizer),
-                name=f"encoder_{i}",
-                dtype=self._dtype,
+        for j in range(self.num_levels):
+            x = LinearDense(
+                self.inner_shape,
+                name=f"encoder_{j}",
+                # kernel_regularizer=regularizers.L1(self.reg_param),
             )(x)
             encoder_layers.append(x)
 
@@ -109,28 +92,20 @@ class PseudoVcycle(keras.Model):
         Returns:
             keras.Model: The decoder model.
         """
-        inputs = keras.Input(shape=(self.encoding_dim,))
+        inputs = keras.Input(shape=(self.inner_shape,))
         x = inputs
 
         decoder_layers = []
 
-        for i in range(self.num_levels):
-            x = layers.Dense(
-                self.lin_shape,
-                activation="linear",
-                kernel_regularizer=SymIdL1Regularization(
-                    self.regularizer,
-                    self.encoder.layers[i + 1].get_weights()[0],
-                ),
-                use_bias=self.use_bias,
-                bias_regularizer=regularizers.l1(self.regularizer),
-                name=f"decoder_{i}",
-                dtype=self._dtype,
+        for j in range(1, self.num_levels + 1):
+            x = LinearDense(
+                self._input_shape[-1],
+                name=f"decoder_{j}",
+                # kernel_regularizer=SymIdL1Regularization(
+                #     self.reg_param, self.encoder.layers[j].get_weights()[0]
+                # ),
             )(x)
             decoder_layers.append(x)
-
-        # x = layers.Reshape(self._input_shape, name="reshape")(x)
-        # decoder_layers.append(x)
 
         return keras.Model(inputs, decoder_layers, name="decoder")
 
@@ -148,25 +123,24 @@ class PseudoVcycle(keras.Model):
         """
         x = self.encoder(inputs, training=training)
         x = self.decoder(x, training=training)
-
         return x
 
 
 if __name__ == "__main__":
     # see https://blog.keras.io/building-autoencoders-in-keras.html
-    encoding_dim = 32
-    input_shape = (784,)
-    num_levels = 1
-    compression_factor = 24.5
-    regularizer = 1.0e-4
-    use_bias = False
+    ENCODING_DIM = 32
+    INPUT_SHAPE = (784,)
+    NUM_LEVELS = 1
+    COMPRESSION_FACTOR = 24.5
+    REG_PARAM = 1.0e-2
+    USE_BIAS = False
 
     model = PseudoVcycle(
-        input_shape=input_shape,
-        num_levels=num_levels,
-        compression_factor=compression_factor,
-        regularizer=regularizer,
-        use_bias=use_bias,
+        input_shape=INPUT_SHAPE,
+        num_levels=NUM_LEVELS,
+        compression_factor=COMPRESSION_FACTOR,
+        reg_param=REG_PARAM,
+        use_bias=USE_BIAS,
     )
     model.compile(optimizer="adam", loss="mean_absolute_error")
 
@@ -190,18 +164,18 @@ if __name__ == "__main__":
     encoded_imgs = model.encoder.predict(x_test)
     decoded_imgs = model.decoder.predict(encoded_imgs)
 
-    n = 10
+    N = 10
     plt.figure(figsize=(20, 4))
-    for i in range(n):
+    for i in range(N):
         # display original
-        ax = plt.subplot(2, n, i + 1)
+        ax = plt.subplot(2, N, i + 1)
         plt.imshow(x_test[i].reshape(28, 28))
         plt.gray()
         ax.get_xaxis().set_visible(False)
         ax.get_yaxis().set_visible(False)
 
         # display reconstruction
-        ax = plt.subplot(2, n, i + 1 + n)
+        ax = plt.subplot(2, N, i + 1 + N)
         plt.imshow(decoded_imgs[i].reshape(28, 28))
         plt.gray()
         ax.get_xaxis().set_visible(False)
@@ -211,7 +185,7 @@ if __name__ == "__main__":
 
     # Use matplotlib.pyplot.spy to visualize the weights of the encoder
     # and decoder models.
-    for i in range(1, num_levels + 1):
+    for i in range(1, NUM_LEVELS + 1):
         plt.figure(figsize=(10, 10))
         plt.spy(model.encoder.layers[i].get_weights()[0], markersize=1)
         plt.title(f"Encoder Layer {i}")
@@ -226,7 +200,7 @@ if __name__ == "__main__":
 
     # Compute the difference between the encoder and decoder weights.
     # Use numpy.allclose to check if the weights are equal.
-    for i in range(1, num_levels + 1):
+    for i in range(1, NUM_LEVELS + 1):
         diff_1 = (
             ops.transpose(model.encoder.layers[i].get_weights()[0])
             - model.decoder.layers[i].get_weights()[0]
