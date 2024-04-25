@@ -4,7 +4,6 @@ V-Cycle in a Multigrid solver.
 """
 
 import keras
-from keras import layers
 from keras import regularizers
 from keras.datasets import mnist
 from keras import ops
@@ -13,6 +12,7 @@ import matplotlib.pyplot as plt
 
 from layers import LinearDense
 from metrics import SymIdL1Regularization
+from initializers import MatrixInitializer
 
 
 class PseudoVcycle(keras.Model):
@@ -81,6 +81,7 @@ class PseudoVcycle(keras.Model):
                 name=f"encoder_{j}",
                 kernel_regularizer=regularizers.L1(self.reg_param),
                 initializer="glorot_uniform",
+                dtype=self.dtype,
             )(x)
             encoder_layers.append(x)
 
@@ -108,6 +109,7 @@ class PseudoVcycle(keras.Model):
                     self.reg_param, self.encoder.layers[j].get_weights()[0]
                 ),
                 initializer="zeros",
+                dtype=self.dtype,
             )(x)
             decoder_layers.append(x)
 
@@ -130,6 +132,129 @@ class PseudoVcycle(keras.Model):
         return x
 
 
+class PseudoMG(keras.Model):
+    """
+    Encoder-Decoder model for mimicking a V-Cycle in a Multigrid solver.
+    """
+
+    def __init__(
+        self,
+        input_shape: tuple,
+        matrix=None,
+        num_levels: int = 1,
+        compression_factor: float = 2.0,
+        reg_param: float = 1.0e-4,
+        use_bias: bool = False,
+        dtype="float32",
+    ):
+        """
+        Constructor fo the PseudoMG model.
+        """
+        assert matrix is not None, "Matrix must be provided."
+        super().__init__()
+
+        self._name = "PseudoMG"
+        self.matrix = matrix
+
+        self._input_shape = input_shape
+        self.num_levels = num_levels
+        # self.inner_shapes = [int(input_shape[-1] // (compression_factor ** j)) for j in range(1, num_levels + 1)]
+        self.inner_shape = int(input_shape[-1] // compression_factor)
+        self.reg_param = reg_param
+        self.use_bias = use_bias
+        self._dtype = dtype
+
+        self.encoder = self.build_encoder()
+        self.decoder = self.build_decoder()
+        self.range_space = self.build_range_space(self.matrix)
+
+        self.range_space.trainable = False
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @dtype.setter
+    def dtype(self, dtype):
+        self._dtype = dtype
+
+    def build_encoder(self):
+        """
+        Build the encoder part of the model.
+
+        Returns:
+            keras.Model: The encoder model.
+        """
+        inputs = keras.Input(shape=self._input_shape)
+        x = inputs
+
+        encoder_layers = []
+
+        for j in range(self.num_levels):
+            x = LinearDense(
+                self.inner_shape,
+                name=f"encoder_{j}",
+                kernel_regularizer=regularizers.L1(self.reg_param),
+                initializer="glorot_uniform",
+                dtype=self.dtype,
+            )(x)
+            encoder_layers.append(x)
+
+        return keras.Model(inputs, encoder_layers, name="encoder")
+
+    def build_decoder(self):
+        """
+        Build the decoder part of the model.
+
+        Returns:
+            keras.Model: The decoder model.
+        """
+        inputs = keras.Input(shape=(self.inner_shape,))
+        x = inputs
+
+        decoder_layers = []
+
+        for j in range(1, self.num_levels + 1):
+            x = LinearDense(
+                self._input_shape[-1],
+                name=f"decoder_{j}",
+                kernel_regularizer=SymIdL1Regularization(
+                    self.reg_param, self.encoder.layers[j].get_weights()[0]
+                ),
+                initializer="zeros",
+                dtype=self.dtype,
+            )(x)
+            decoder_layers.append(x)
+
+        return keras.Model(inputs, decoder_layers, name="decoder")
+
+    def build_range_space(self, matrix):
+        """
+        Build the range space of the model.
+
+        Args:
+            matrix (tf.Tensor): Matrix tensor.
+
+        Returns:
+            keras.Model: The range space model.
+        """
+        inputs = keras.Input(shape=self._input_shape)
+        x = inputs
+
+        range_space_layers = []
+
+        x = LinearDense(
+            self.inner_shape,
+            name="range_space_0",
+            initializer=MatrixInitializer(matrix),
+            dtype=self.dtype,
+            trainable=False,
+        )(x)
+        range_space_layers.append(x)
+
+        return keras.Model(inputs, range_space_layers, name="range_space")
+
+
 if __name__ == "__main__":
     # see https://blog.keras.io/building-autoencoders-in-keras.html
     ENCODING_DIM = 32
@@ -138,6 +263,8 @@ if __name__ == "__main__":
     COMPRESSION_FACTOR = 24.5
     REG_PARAM = 1.0e-4
     USE_BIAS = False
+    DTYPE = "float32"
+    # DTYPE = tf.complex64
 
     model = PseudoVcycle(
         input_shape=INPUT_SHAPE,
@@ -145,6 +272,7 @@ if __name__ == "__main__":
         compression_factor=COMPRESSION_FACTOR,
         reg_param=REG_PARAM,
         use_bias=USE_BIAS,
+        dtype=DTYPE,
     )
     model.compile(optimizer="adam", loss="mean_absolute_error")
 

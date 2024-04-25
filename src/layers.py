@@ -12,12 +12,28 @@ class LinearDense(Layer):
     """
 
     def __init__(
-        self, units, kernel_regularizer=None, initializer="glorot_uniform", **kwargs
+        self,
+        units,
+        kernel_regularizer=None,
+        initializer="glorot_uniform",
+        dtype="float32",
+        trainable=True,
+        **kwargs
     ):
         super().__init__(**kwargs)
         self.units = units
         self.kernel_regularizer = kernel_regularizer
         self.initializer = initializer
+        self._dtype = dtype
+        self.trainable = trainable
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @dtype.setter
+    def dtype(self, value):
+        self._dtype = value
 
     def build(self, input_shape):
         self.kernel = self.add_weight(
@@ -25,6 +41,7 @@ class LinearDense(Layer):
             initializer=self.initializer,
             trainable=True,
             name="kernel",
+            dtype=self._dtype,
         )
 
     def call(self, x):
