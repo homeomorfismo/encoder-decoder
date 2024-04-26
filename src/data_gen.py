@@ -156,7 +156,8 @@ class LaplaceDGen(DataGenerator):
         z = x.copy()
         ax = self.sparse_operator @ z
         z -= self.sparse_solver(ax)
-        z /= np.linalg.norm(z)
+        # z /= np.linalg.norm(z)
+        z /= np.max(np.abs(z))
         return z
 
     def from_smooth(self, num_samples: int):
@@ -239,7 +240,7 @@ def test_conversions():
     assert np.allclose(test_array, real_to_complex(complex_to_real(test_array)))
 
 
-def test_data_gen():
+def test_data_gen_vs_direct():
     """
     Test the data generator.
     """
@@ -272,7 +273,22 @@ def test_data_gen_sines(num_samples: int = 5):
         input("\tNormalized residual: Press Enter to continue...")
 
 
+def test_data_gen_random(num_samples: int = 5):
+    """
+    Draw several random functions.
+    """
+    mesh = ng.Mesh(geo2d.make_unit_square().GenerateMesh(maxh=0.1))
+    generate = LaplaceDGen(mesh, tol=1e-2, is_complex=True)
+    x_data = generate.from_random(num_samples)
+    gf_data = ng.GridFunction(generate.ngsolve_operator.space)
+    for i in range(num_samples):
+        gf_data.vec.FV().NumPy()[:] = x_data[i]
+        ng.Draw(gf_data, mesh, f"Res Random {i}")
+        input("\tNormalized residual: Press Enter to continue...")
+
+
 if __name__ == "__main__":
     test_conversions()
-    test_data_gen()
+    test_data_gen_vs_direct()
     test_data_gen_sines()
+    test_data_gen_random()
