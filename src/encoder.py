@@ -26,7 +26,6 @@ class PseudoVcycle(keras.Model):
         num_levels: int = 1,
         compression_factor: float = 2.0,
         reg_param: float = 1.0e-4,
-        use_bias: bool = False,
         dtype="float32",
     ):
         """
@@ -45,7 +44,6 @@ class PseudoVcycle(keras.Model):
         self.inner_shape = int(input_shape[-1] // compression_factor)
         # self.inner_shapes = [int(input_shape[-1] // (compression_factor ** j)) for j in range(1, num_levels + 1)]
         self.reg_param = reg_param
-        self.use_bias = use_bias
         self._dtype = dtype
 
         self.encoder = self.build_encoder()
@@ -144,7 +142,6 @@ class PseudoMG(keras.Model):
         num_levels: int = 1,
         compression_factor: float = 2.0,
         reg_param: float = 1.0e-4,
-        use_bias: bool = False,
         dtype="float32",
     ):
         """
@@ -161,7 +158,6 @@ class PseudoMG(keras.Model):
         # self.inner_shapes = [int(input_shape[-1] // (compression_factor ** j)) for j in range(1, num_levels + 1)]
         self.inner_shape = int(input_shape[-1] // compression_factor)
         self.reg_param = reg_param
-        self.use_bias = use_bias
         self._dtype = dtype
 
         self.encoder = self.build_encoder()
@@ -278,7 +274,6 @@ INPUT_SHAPE = (784,)
 NUM_LEVELS = 1
 COMPRESSION_FACTOR = 24.5
 REG_PARAM = 1.0e-4
-USE_BIAS = False
 DTYPE = "float32"
 
 
@@ -291,7 +286,6 @@ def test_pseudo_vcycle():
         num_levels=NUM_LEVELS,
         compression_factor=COMPRESSION_FACTOR,
         reg_param=REG_PARAM,
-        use_bias=USE_BIAS,
         dtype=DTYPE,
     )
     model.compile(optimizer="adam", loss="mean_absolute_error")
@@ -345,7 +339,6 @@ def test_pseudo_mg():
         num_levels=NUM_LEVELS,
         compression_factor=COMPRESSION_FACTOR,
         reg_param=REG_PARAM,
-        use_bias=USE_BIAS,
         dtype=DTYPE,
     )
     model.compile(optimizer="adam", loss="mean_absolute_error")
