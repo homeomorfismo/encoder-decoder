@@ -16,9 +16,33 @@ class DataGenerator(ABC):
     """
 
     @abstractmethod
-    def __str__(self) -> str:
+    def make_operator(self):
         """
-        Return a string representation of the data generator.
+        Make a linear operator.
+        """
+
+    @abstractmethod
+    def make_sparse_operator(self):
+        """
+        Make a sparse linear operator.
+        """
+
+    @abstractmethod
+    def make_solver(self):
+        """
+        Make a solver.
+        """
+
+    @abstractmethod
+    def make_sparse_solver(self):
+        """
+        Make a sparse solver.
+        """
+
+    @abstractmethod
+    def make_data(self, x):
+        """
+        Make data.
         """
 
     @abstractmethod
@@ -39,7 +63,12 @@ class LaplaceDGen(DataGenerator):
     Data generator for the Laplace equation.
     """
 
-    def __init__(self, mesh: ng.Mesh, precond: str = "local", is_complex: bool = True):
+    def __init__(
+        self,
+        mesh: ng.Mesh,
+        tol: float = 1e-5,
+        is_complex: bool = True,
+    ):
 
         matrix_coeff = ng.CF((1.0, 0.0, 0.0, 1.0), dims=(2, 2))
         vector_coeff = ng.CF((0.0, 0.0))
@@ -53,44 +82,106 @@ class LaplaceDGen(DataGenerator):
             order=1,
             is_complex=is_complex,
         )
-        c = ng.Preconditioner(a, precond)
-
         fes.assemble(a)
 
-        self.laplace = a
-        self.precond = c
-        self.space = space
-        self.dim = mesh.dim
+        self.__space = space
+        self.__dim = space.mesh.dim
+        self.__ng_input = ng.GridFunction(self.__space)
+        self.__ng_output = ng.GridFunction(self.__space)
 
-    def __str__(self) -> str:
-        description = (
-            "Laplace Data Generator:\n"
-            + "Generates data for the Laplace equation. It is a simple\n"
-            + "second-order elliptic partial differential equation.\n"
+        self.ngsolve_operator = a
+        self.operator = self.make_operator()
+        self.sparse_operator = self.make_sparse_operator()
+        self.tol = tol
+
+        self.solver = self.make_solver()
+        self.sparse_solver = self.make_sparse_solver()
+
+    def make_operator(self):
+        """
+        Make a linear operator.
+
+        Applys the NGSolve operator to a numpy array.
+        Defines a scipy linear operator.
+        """
+
+        def operator(x):
+            self.__ng_input.vec.FV().NumPy()[:] = x
+            self.__ng_output.vec.data = self.ngsolve_operator.mat * self.__ng_input.vec
+            return self.__ng_output.vec.FV().NumPy()
+
+        scipy_operator = sp.linalg.LinearOperator(
+            (self.ngsolve_operator.mat.height, self.ngsolve_operator.mat.width),
+            matvec=operator,
         )
-        description += f"\tSpace: {self.space}\n"
-        description += f"\tPreconditioner: {self.precond}\n"
-        # description += f"Laplace Matrix: {self.laplace}\n"
-        return description
+        return scipy_operator
+
+    def make_sparse_operator(self):
+        """
+        Make a sparse linear operator.
+
+        Returns a scipy sparse matrix in CSR format, from the NGSolve operator.
+        """
+        a_row, a_col, a_val = self.ngsolve_operator.mat.COO()
+        return sp.csr_matrix(
+            (a_val, (a_row, a_col)),
+            shape=(self.ngsolve_operator.mat.height, self.ngsolve_operator.mat.width),
+        )
+
+    def make_solver(self):
+        """
+        Make a solver.
+        """
+
+        def error(*args, **kwargs):
+            raise NotImplementedError("Direct solver not implemented.")
+
+        return error
+
+    def make_sparse_solver(self):
+        """
+        Make a sparse solver.
+
+        Returns a sparse solver based on the ILU preconditioner,
+        for the sparse operator (the CSR matrix).
+        """
+        return sp.linalg.spilu(self.sparse_operator, drop_tol=self.tol).solve
+
+    def make_data(self, x):
+        """
+        Make data.
+
+        Returns the residual of the NGSolve operator applied to x, normalized.
+        """
+        z = x.copy()
+        ax = self.sparse_operator @ z
+        z -= self.sparse_solver(ax)
+        z /= np.linalg.norm(z)
+        return z
 
     def from_smooth(self, num_samples: int):
-        gf = ng.GridFunction(self.space)
+        """
+        Generate data from smooth functions.
+
+        Returns a numpy array of num_samples samples.
+        """
+        gf = ng.GridFunction(self.__space)
         x_data = ng.MultiVector(gf.vec, num_samples)
         for i in range(1, num_samples + 1):
-            if self.dim == 1:
+            if self.__dim == 1:
                 gf.Set(
                     np.random.rand() * ng.sin(np.pi * i * ng.x)
                     + np.random.rand() * ng.cos(np.pi * i * ng.x)
                     + np.random.rand()
                 )
-            elif self.dim == 2:
+            elif self.__dim == 2:
                 gf.Set(
                     np.random.rand()
                     * ng.sin(np.pi * i * ng.x)
                     * ng.sin(np.pi * i * ng.y)
                     + np.random.rand()
                 )
-            elif self.dim == 3:
+            elif self.__dim == 3:
                 gf.Set(
                     np.random.rand()
                     * ng.sin(np.pi * i * ng.x)
@@ -100,26 +191,24 @@ class LaplaceDGen(DataGenerator):
                 )
             else:
                 raise ValueError("Not implemented for dimensions > 3.")
-            x_data[i - 1].data = gf.vec.data
-            x_data[i - 1] -= self.precond * (self.laplace.mat * gf.vec)
-            x_data[i - 1] /= np.linalg.norm(x_data[i - 1])
+            x_data[i - 1].FV().NumPy()[:] = self.make_data(gf.vec.FV().NumPy())
         return multivec_to_numpy(x_data)
 
     def from_random(self, num_samples: int):
-        lap_mat = self.laplace.mat
-        a_row, a_col, a_val = lap_mat.COO()
-        lap_sp = sp.coo_matrix(
-            (a_val, (a_row, a_col)), shape=(lap_mat.height, lap_mat.width)
-        )
-        gf = ng.GridFunction(self.space)
+        """
+        Generate data from random vectors.
+
+        Returns a numpy array of num_samples samples.
+        """
+        gf = ng.GridFunction(self.__space)
         x_data = ng.MultiVector(gf.vec, num_samples)
         for i in range(num_samples):
             x_data[i].SetRandom()
-            x_data[i] += self.precond * (lap_sp @ x_data[i])
-            x_data[i] /= np.linalg.norm(x_data[i])
+            x_data[i].FV().NumPy()[:] = self.make_data(x_data[i].FV().NumPy())
         return multivec_to_numpy(x_data)
 
 
+####################################################################################################
 def multivec_to_numpy(mv):
     """
     Convert a ngsolve.MultiVector to a numpy array.
@@ -141,6 +230,7 @@ def real_to_complex(x) -> np.ndarray:
     return x[: len(x) // 2] + 1j * x[len(x) // 2 :]
 
 
+####################################################################################################
 def test_conversions():
     """
     Test the conversions between complex and real numpy arrays.
@@ -153,32 +243,33 @@ def test_data_gen():
     """
     Test the data generator.
     """
-    laplace_dgen = LaplaceDGen(ng.Mesh(geo2d.make_unit_square().GenerateMesh(maxh=0.1)))
-    print(laplace_dgen)
+    mesh = ng.Mesh(geo2d.make_unit_square().GenerateMesh(maxh=0.1))
+    generate = LaplaceDGen(mesh, tol=1e-2, is_complex=True)
 
-    gf = ng.GridFunction(laplace_dgen.space)
+    gf = ng.GridFunction(generate.ngsolve_operator.space)
     gf.Set(ng.sin(np.pi * ng.x) * ng.sin(np.pi * ng.y))
-    ng.Draw(gf, laplace_dgen.space.mesh, "sin(pi/2 * x)")
-    input("Test Data Generator: Press Enter to continue...")
+    ng.Draw(gf, generate.ngsolve_operator.space.mesh, "sin(pi*x)*sin(pi*y)")
+    input("sin(pi*x)*sin(pi*y): Press Enter to continue...")
 
-    x_data = laplace_dgen.from_smooth(1)
-    gf_data = ng.GridFunction(laplace_dgen.space)
+    x_data = generate.from_smooth(1)
+    gf_data = ng.GridFunction(generate.ngsolve_operator.space)
     gf_data.vec.FV().NumPy()[:] = x_data[0]
-    ng.Draw(gf_data, laplace_dgen.space.mesh, "smooth data")
-    input("Test Data Generator: Press Enter to continue...")
+    ng.Draw(gf_data, mesh, "smooth data")
+    input("Normalized residual: Press Enter to continue...")
 
 
 def test_data_gen_sines(num_samples: int = 5):
     """
     Draw several sine functions.
     """
-    laplace_dgen = LaplaceDGen(ng.Mesh(geo2d.make_unit_square().GenerateMesh(maxh=0.1)))
-    x_data = laplace_dgen.from_smooth(num_samples)
-    gf_data = ng.GridFunction(laplace_dgen.space)
+    mesh = ng.Mesh(geo2d.make_unit_square().GenerateMesh(maxh=0.1))
+    generate = LaplaceDGen(mesh, tol=1e-2, is_complex=True)
+    x_data = generate.from_smooth(num_samples)
+    gf_data = ng.GridFunction(generate.ngsolve_operator.space)
     for i in range(num_samples):
         gf_data.vec.FV().NumPy()[:] = x_data[i]
-        ng.Draw(gf_data, laplace_dgen.space.mesh, f"smooth data {i}")
-        input("Test Data Generator: Press Enter to continue...")
+        ng.Draw(gf_data, mesh, f"Res Sine {i}")
+        input("\tNormalized residual: Press Enter to continue...")
 
 
 if __name__ == "__main__":
