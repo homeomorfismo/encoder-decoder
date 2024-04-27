@@ -57,7 +57,14 @@ class DataGenerator(ABC):
         Generate data from random vectors.
         """
 
+    @abstractmethod
+    def get_gf(self):
+        """
+        Get a GridFunction.
+        """
 
+
+####################################################################################################
 class LaplaceDGen(DataGenerator):
     """
     Data generator for the Laplace equation.
@@ -160,53 +167,83 @@ class LaplaceDGen(DataGenerator):
         z /= np.max(np.abs(z))
         return z
 
-    def from_smooth(self, num_samples: int):
+    def from_smooth(self, num_samples: int, field: str = "real"):
         """
         Generate data from smooth functions.
 
         Returns a numpy array of num_samples samples.
         """
+        if field == "real":
+            alpha = np.random.rand()
+        elif field == "imag":
+            alpha = np.random.rand() * 1.0j
+        else:
+            alpha = np.random.rand() + np.random.rand() * 1.0j
         gf = ng.GridFunction(self.__space)
         x_data = ng.MultiVector(gf.vec, num_samples)
         for i in range(1, num_samples + 1):
             if self.__dim == 1:
+                a = np.random.rand()
                 gf.Set(
-                    np.random.rand() * ng.sin(np.pi * i * ng.x)
-                    + np.random.rand() * ng.cos(np.pi * i * ng.x)
-                    + np.random.rand()
+                    (np.random.rand() * ng.sin(np.pi * a * i * ng.x) + np.random.rand())
+                    * alpha
                 )
             elif self.__dim == 2:
+                a = np.random.rand()
+                b = np.random.rand()
                 gf.Set(
-                    np.random.rand()
-                    * ng.sin(np.pi * i * ng.x)
-                    * ng.sin(np.pi * i * ng.y)
-                    + np.random.rand()
+                    (
+                        np.random.rand()
+                        * ng.sin(np.pi * a * i * ng.x)
+                        * ng.sin(np.pi * b * i * ng.y)
+                        + np.random.rand()
+                    )
+                    * alpha
                 )
             elif self.__dim == 3:
+                a = np.random.rand()
+                b = np.random.rand()
+                c = np.random.rand()
                 gf.Set(
-                    np.random.rand()
-                    * ng.sin(np.pi * i * ng.x)
-                    * ng.sin(np.pi * i * ng.y)
-                    * ng.sin(np.pi * i * ng.z)
-                    + np.random.rand()
+                    (
+                        np.random.rand()
+                        * ng.sin(np.pi * a * i * ng.x)
+                        * ng.sin(np.pi * b * i * ng.y)
+                        * ng.sin(np.pi * c * i * ng.z)
+                        + np.random.rand()
+                    )
+                    * alpha
                 )
             else:
                 raise ValueError("Not implemented for dimensions > 3.")
             x_data[i - 1].FV().NumPy()[:] = self.make_data(gf.vec.FV().NumPy())
         return multivec_to_numpy(x_data)
 
-    def from_random(self, num_samples: int):
+    def from_random(self, num_samples: int, field: str = "real"):
         """
         Generate data from random vectors.
 
         Returns a numpy array of num_samples samples.
         """
+        if field == "real":
+            alpha = np.random.rand()
+        elif field == "imag":
+            alpha = np.random.rand() * 1.0j
+        else:
+            alpha = np.random.rand() + np.random.rand() * 1.0j
         gf = ng.GridFunction(self.__space)
         x_data = ng.MultiVector(gf.vec, num_samples)
         for i in range(num_samples):
             x_data[i].SetRandom()
+            x_data[i].FV().NumPy()[:] *= alpha
             x_data[i].FV().NumPy()[:] = self.make_data(x_data[i].FV().NumPy())
         return multivec_to_numpy(x_data)
+
+    def get_gf(self, name="gf"):
+        """
+        Get a GridFunction.
+        """
+        return ng.GridFunction(self.__space, name=name)
 
 
 ####################################################################################################
@@ -220,15 +257,17 @@ def multivec_to_numpy(mv):
 def complex_to_real(x) -> np.ndarray:
     """
     Convert a complex numpy array to a real numpy array.
+    [z1, z2, z3, ...] -> [ [z1.real, z2.real, ...], [z1.imag, z2.imag, ...] ]
     """
     return np.concatenate((x.real, x.imag), axis=0)
 
 
 def real_to_complex(x) -> np.ndarray:
     """
-    Convert a real numpy array to a complex numpy array.
+    Unconvert a real numpy array to a complex numpy array.
+    [ [z1.real, z2.real, ...], [z1.imag, z2.imag, ...] ] -> [z1, z2, z3, ...]
     """
-    return x[: len(x) // 2] + 1j * x[len(x) // 2 :]
+    return x[: x.shape[0] // 2] + 1j * x[x.shape[0] // 2 :]
 
 
 ####################################################################################################
@@ -236,59 +275,18 @@ def test_conversions():
     """
     Test the conversions between complex and real numpy arrays.
     """
-    test_array = np.array([1 + 2j, 3 + 4j, 5 + 6j])
+    test_array = np.array([[1 + 2j, 3 + 4j, 5 + 6j], [7 + 8j, 9 + 10j, 11 + 12j]])
+    print(f"test_array:\n {test_array}\n" f"test_array.shape: {test_array.shape}\n")
+    print(
+        f"complex_to_real(test_array):\n {complex_to_real(test_array)}\n"
+        f"complex_to_real(test_array).shape: {complex_to_real(test_array).shape}\n"
+    )
+    print(
+        f"real_to_complex(complex_to_real(test_array)):\n {real_to_complex(complex_to_real(test_array))}\n"
+        f"real_to_complex(complex_to_real(test_array)).shape: {real_to_complex(complex_to_real(test_array)).shape}\n"
+    )
     assert np.allclose(test_array, real_to_complex(complex_to_real(test_array)))
-
-
-def test_data_gen_vs_direct():
-    """
-    Test the data generator.
-    """
-    mesh = ng.Mesh(geo2d.make_unit_square().GenerateMesh(maxh=0.1))
-    generate = LaplaceDGen(mesh, tol=1e-2, is_complex=True)
-
-    gf = ng.GridFunction(generate.ngsolve_operator.space)
-    gf.Set(ng.sin(np.pi * ng.x) * ng.sin(np.pi * ng.y))
-    ng.Draw(gf, generate.ngsolve_operator.space.mesh, "sin(pi*x)*sin(pi*y)")
-    input("sin(pi*x)*sin(pi*y): Press Enter to continue...")
-
-    x_data = generate.from_smooth(1)
-    gf_data = ng.GridFunction(generate.ngsolve_operator.space)
-    gf_data.vec.FV().NumPy()[:] = x_data[0]
-    ng.Draw(gf_data, mesh, "smooth data")
-    input("Normalized residual: Press Enter to continue...")
-
-
-def test_data_gen_sines(num_samples: int = 5):
-    """
-    Draw several sine functions.
-    """
-    mesh = ng.Mesh(geo2d.make_unit_square().GenerateMesh(maxh=0.1))
-    generate = LaplaceDGen(mesh, tol=1e-2, is_complex=True)
-    x_data = generate.from_smooth(num_samples)
-    gf_data = ng.GridFunction(generate.ngsolve_operator.space)
-    for i in range(num_samples):
-        gf_data.vec.FV().NumPy()[:] = x_data[i]
-        ng.Draw(gf_data, mesh, f"Res Sine {i}")
-        input("\tNormalized residual: Press Enter to continue...")
-
-
-def test_data_gen_random(num_samples: int = 5):
-    """
-    Draw several random functions.
-    """
-    mesh = ng.Mesh(geo2d.make_unit_square().GenerateMesh(maxh=0.1))
-    generate = LaplaceDGen(mesh, tol=1e-2, is_complex=True)
-    x_data = generate.from_random(num_samples)
-    gf_data = ng.GridFunction(generate.ngsolve_operator.space)
-    for i in range(num_samples):
-        gf_data.vec.FV().NumPy()[:] = x_data[i]
-        ng.Draw(gf_data, mesh, f"Res Random {i}")
-        input("\tNormalized residual: Press Enter to continue...")
 
 
 if __name__ == "__main__":
     test_conversions()
-    test_data_gen_vs_direct()
-    test_data_gen_sines()
-    test_data_gen_random()

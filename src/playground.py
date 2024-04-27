@@ -13,23 +13,37 @@ from data_gen import real_to_complex, complex_to_real, LaplaceDGen
 
 
 if __name__ == "__main__":
-    # keras.config.set_dtype_policy("complex64")
     tf.compat.v1.enable_eager_execution()
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
 
-    laplace_dgen = LaplaceDGen(mesh, precond="local", is_complex=True)
+    laplace_gen = LaplaceDGen(mesh, tol=1e-1, is_complex=True)
 
-    x_data_smooth = laplace_dgen.from_smooth(2000)
-    x_data_random = laplace_dgen.from_random(2000)
+    x_data_smooth_real = laplace_gen.from_smooth(1000, field="real")
+    x_data_smooth_imag = laplace_gen.from_smooth(1000, field="imag")
+    x_data_smooth_complex = laplace_gen.from_smooth(1000, field="complex")
+    x_data_random_real = laplace_gen.from_random(1000, field="real")
+    x_data_random_imag = laplace_gen.from_random(1000, field="imag")
+    x_data_random_complex = laplace_gen.from_random(1000, field="complex")
+
+    x_data_smooth = np.concatenate(
+        (x_data_smooth_real, x_data_smooth_imag, x_data_smooth_complex), axis=0
+    )
+    x_data_random = np.concatenate(
+        (x_data_random_real, x_data_random_imag, x_data_random_complex), axis=0
+    )
+
     x_data = np.concatenate((x_data_smooth, x_data_random), axis=0)
-    x_data = complex_to_real(x_data)
+    x_data = complex_to_real(x_data.T)
     x_data = tf.convert_to_tensor(x_data, dtype=tf.float32)
+    x_data = tf.transpose(x_data)
 
+    print(x_data.shape)  # (12000, 511)
+    # Vcycle
     vcycle = PseudoVcycle(
         x_data.shape[1:],
         num_levels=1,
-        compression_factor=20.0,
-        regularizer=1.0e-6,
+        compression_factor=5.0,
+        reg_param=1e-5,
         dtype="float32",
     )
 
@@ -39,18 +53,44 @@ if __name__ == "__main__":
         x_data,
         x_data,
         epochs=200,
-        batch_size=100,
+        batch_size=500,
         shuffle=True,
         validation_data=(x_data, x_data),
     )
 
-    x_data_smooth = laplace_dgen.from_smooth(1)
-    print(type(x_data_smooth))
-    print(x_data_smooth)
-    input("Press Enter to continue...")
+    # Summary of Vcycle
+    vcycle.summary()
+    vcycle.encoder.summary()
+    vcycle.decoder.summary()
 
-    x_predict = complex_to_real(x_data_smooth)
-    x_predict = tf.convert_to_tensor(x_predict, dtype=tf.float32)
-    x_predict = vcycle.predict(x_predict)
-    print(type(x_predict))
-    print(x_predict)
+    # Attemp 1: Visualize residual
+    x1 = x_data[0].numpy()  # real (2N, )
+    x1 = real_to_complex(x1)  # complex (N, )
+
+    x_pred = complex_to_real(x1)  # real (2N, )
+    x_pred = tf.convert_to_tensor(x_pred, dtype=tf.float32)  # real (2N, )
+    x_pred = tf.reshape(x_pred, (1, *x_pred.shape))  # real (1, 2N, )
+
+    x_pred = vcycle.predict(x_pred)  # real (1, 2N, )
+
+    x_pred = real_to_complex(x_pred[0])  # complex (N, )
+    gf = laplace_gen.get_gf(name="res(sin(pi*x)*sin(pi*y))")
+    gf.vec.FV().NumPy()[:] = x_pred  # Here
+
+    ng.Draw(gf, mesh, "res(sin(pi*x)*sin(pi*y))")
+
+    # Attempt 2: Encode and decode
+    gf = laplace_gen.get_gf(name="cos(pi*x)*cos(pi*y)")
+    gf.Set(ng.cos(np.pi * ng.x) * ng.cos(np.pi * ng.y))
+    ng.Draw(gf, mesh, "cos(pi*x)*cos(pi*y)")
+
+    print("Predicting...")
+    x_data = np.copy(gf.vec.FV().NumPy())  # complex (N, )
+    x_data = complex_to_real(x_data.T)  # real (2N, )
+    x_data = tf.convert_to_tensor(x_data, dtype=tf.float32)  # real (2N, )
+    x_data = tf.reshape(x_data, (1, *x_data.shape))  # real (1, 2N, )
+    x_pred = vcycle.predict(x_data)  # real (1, 2N, )
+
+    gf_ed = laplace_gen.get_gf(name="decoded(cos(pi*x)*cos(pi*y))")
+    gf_ed.vec.FV().NumPy()[:] = real_to_complex(x_pred[0])
+    ng.Draw(gf_ed, mesh, "decoded(cos(pi*x)*cos(pi*y))")
