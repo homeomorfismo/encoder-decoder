@@ -2,9 +2,10 @@
 This file contains custom regularizers for symmetric and identity matrices.
 """
 
-from keras.metrics import Metric
 from keras import ops
 from keras import regularizers
+
+# from keras import activations
 
 
 class SymL1Regularization(regularizers.Regularizer):
@@ -46,7 +47,7 @@ class SymL1Regularization(regularizers.Regularizer):
         Returns:
             dict: The configuration of the regularizer.
         """
-        return {"strength": self.strength, "transpose": self.transpose}
+        return {"strength": self.strength, "weight_matrix": self.weight_matrix}
 
 
 class IdL1Regularization(regularizers.Regularizer):
@@ -140,5 +141,48 @@ class SymIdL1Regularization(regularizers.Regularizer):
         return {
             "strength": self.strength,
             "identity": self.identity,
-            "transpose": self.transpose,
+            "weight_matrix": self.weight_matrix,
         }
+
+
+# WIP
+# class L0Regularization(regularizers.Regularizer):
+#     """
+#     L0 regularization for matrices.
+#     From https://arxiv.org/pdf/1712.01312.pdf
+#     """
+
+#     def __init__(self, interval_strech: tuple = (-.1, 1.1), strength: float = 1e-3):
+#         """
+#         Initialize the regularizer.
+
+#         Args:
+#             strength (float): The regularization strength.
+#         """
+#         assert interval_strech[0] < 0 and interval_strech[1] > 1.0, "Interval must contain (0, 1)"
+
+#         self.strength = strength
+#         self.start = interval_strech[0]
+#         self.end = interval_strech[1]
+
+#     def __call__(self, W):
+#         """
+#         Compute the regularization term.
+
+#         Args:
+#             W (tf.Tensor): The matrix W.
+
+#         Returns:
+#             tf.Tensor: The regularization term.
+#         """
+#         temp = activations.sigmoid(j
+#         return self.strength * ops.count_nonzero(W)
+
+#     def get_config(self):
+#         """
+#         Get the configuration of the regularizer.
+
+#         Returns:
+#             dict: The configuration of the regularizer.
+#         """
+#         return {"strength": self.strength}
