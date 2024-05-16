@@ -10,12 +10,6 @@ def coordinate_descent(matrix, x, r, i):
     Do coordinate descent on the linear system Ax = b,
     for a given guess x and residual r = b - Ax.
     """
-    try:
-        assert r.shape[0] == matrix.shape[0], "Dimension mismatch"
-    except AssertionError as e:
-        print(f"Error: {e}")
-        print("Cast r to a 1D array")
-        r = np.ravel(r)
     t = r[i] / matrix[i, i]  # Compute the step size
     x[i] += t  # Update x[i]
     temp = t * matrix[:, i]  # Compute the update to the residual
@@ -30,7 +24,7 @@ def forward_substitution(matrix, x, b):
     Do forward substitution on the linear system Ax = b,
     for a given guess x and residual r = b - Ax.
     """
-    r = b - matrix @ x
+    r = np.ravel(b - matrix @ x)
     for i in range(len(x)):
         x, r = coordinate_descent(matrix, x, r, i)
     return x, r
@@ -41,7 +35,7 @@ def backward_substitution(matrix, x, b):
     Do backward substitution on the linear system Ax = b,
     for a given guess x and residual r = b - Ax.
     """
-    r = b - np.dot(matrix, x)
+    r = np.ravel(b - matrix @ x)
     for i in range(len(x) - 1, -1, -1):
         x, r = coordinate_descent(matrix, x, r, i)
     return x, r

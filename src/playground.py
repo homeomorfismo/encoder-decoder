@@ -312,17 +312,10 @@ def test_vcycle_solver():
     # Get linear operators
     a_fine = laplace_gen.sparse_operator.todense()
 
-    def temp_a_coarse(x_coarse):
-        x_coarse = x_coarse.reshape((1, vcycle.inner_shape))
-        # x_fine = vcycle.decoder.predict(x_coarse)
-        x_fine = vcycle.decoder(x_coarse).numpy().flatten()
-        ax_fine = a_fine @ x_fine
-        ax_fine = ax_fine.reshape((1, vcycle._input_shape[-1]))
-        # return vcycle.encoder.predict(ax_fine)
-        return vcycle.encoder(ax_fine).numpy().flatten()
+    decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
 
-    print(f"Shape of the fine operator: {a_fine.shape}")
-    print(f"Shape of the coarse operator: {vcycle.inner_shape}")
+    def temp_a_coarse(x_coarse):
+        return decoder_kernel @ a_fine @ decoder_kernel.T @ x_coarse
 
     a_coarse = sp.sparse.linalg.LinearOperator(
         (vcycle.inner_shape, vcycle.inner_shape),
@@ -338,22 +331,17 @@ def test_vcycle_solver():
     # Assemble a two-level solver
     def two_level_solver(x_fine):
         print("Pre-smoothing")
-        r_fine = np.ravel(b_fine - np.dot(a_fine, x_fine))
-        # r_fine = b_fine - np.dot(a_fine, x_fine)
+        r_fine = np.ravel(b_fine - a_fine @ x_fine)
         e_fine = forward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-6, max_iter=100)
         x_fine += e_fine
-        ae_fine = np.ravel(np.dot(a_fine, e_fine))
-        r_fine -= ae_fine
+        r_fine = np.ravel(r_fine - a_fine @ e_fine)
         print("Coarse grid correction")
-        r_fine = r_fine.reshape((1, vcycle._input_shape[-1]))
-        r_coarse = np.ravel(vcycle.encoder(r_fine))
+        r_fine = np.ravel(r_fine)
+        r_coarse = np.ravel(decoder_kernel @ r_fine)
         e_coarse = sp.sparse.linalg.cg(a_coarse, r_coarse)[0]
-        # e_coarse = np.linalg.solve(a_coarse, r_coarse)
-        e_coarse = e_coarse.reshape((1, vcycle.inner_shape))
-        e_fine = np.ravel(vcycle.decoder(e_coarse))
+        e_fine = decoder_kernel.T @ e_coarse
         x_fine += e_fine
-        ae_fine = np.ravel(np.dot(a_fine, e_fine))
-        r_fine -= ae_fine
+        r_fine = np.ravel(r_fine - a_fine @ e_fine)
         print("Post-smoothing")
         e_fine = backward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-6, max_iter=100)
         x_fine += e_fine
