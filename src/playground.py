@@ -15,8 +15,6 @@ from data_gen import real_to_complex, complex_to_real, LaplaceDGen
 from losses import projected_l2_loss
 from solver import forward_gauss_seidel, backward_gauss_seidel
 
-# from fes import assemble, convection_diffusion
-
 
 def test_vcycle_complex():
     """
@@ -313,6 +311,7 @@ def test_vcycle_solver():
     a_fine = laplace_gen.sparse_operator.todense()
 
     decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
+    encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
 
     def temp_a_coarse(x_coarse):
         return decoder_kernel @ a_fine @ decoder_kernel.T @ x_coarse
@@ -320,6 +319,14 @@ def test_vcycle_solver():
     a_coarse = sp.sparse.linalg.LinearOperator(
         (vcycle.inner_shape, vcycle.inner_shape),
         matvec=temp_a_coarse,
+    )
+
+    def temp_a_coarse_2(x_coarse):
+        return encoder_kernel.T @ a_fine @ encoder_kernel @ x_coarse
+
+    a_coarse_2 = sp.sparse.linalg.LinearOperator(
+        (vcycle.inner_shape, vcycle.inner_shape),
+        matvec=temp_a_coarse_2,
     )
 
     # Get right-hand side
@@ -332,7 +339,7 @@ def test_vcycle_solver():
     def two_level_solver(x_fine):
         print("Pre-smoothing")
         r_fine = np.ravel(b_fine - a_fine @ x_fine)
-        e_fine = forward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-6, max_iter=100)
+        e_fine = forward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-8, max_iter=1_000)
         x_fine += e_fine
         r_fine = np.ravel(r_fine - a_fine @ e_fine)
         print("Coarse grid correction")
@@ -343,7 +350,25 @@ def test_vcycle_solver():
         x_fine += e_fine
         r_fine = np.ravel(r_fine - a_fine @ e_fine)
         print("Post-smoothing")
-        e_fine = backward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-6, max_iter=100)
+        e_fine = backward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-8, max_iter=1_000)
+        x_fine += e_fine
+        return x_fine
+
+    def two_level_solver_2(x_fine):
+        print("Pre-smoothing")
+        r_fine = np.ravel(b_fine - a_fine @ x_fine)
+        e_fine = forward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-8, max_iter=1_000)
+        x_fine += e_fine
+        r_fine = np.ravel(r_fine - a_fine @ e_fine)
+        print("Coarse grid correction")
+        r_fine = np.ravel(r_fine)
+        r_coarse = np.ravel(encoder_kernel.T @ r_fine)
+        e_coarse = sp.sparse.linalg.cg(a_coarse_2, r_coarse)[0]
+        e_fine = encoder_kernel @ e_coarse
+        x_fine += e_fine
+        r_fine = np.ravel(r_fine - a_fine @ e_fine)
+        print("Post-smoothing")
+        e_fine = backward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-8, max_iter=1_000)
         x_fine += e_fine
         return x_fine
 
@@ -351,6 +376,15 @@ def test_vcycle_solver():
     x0 = np.zeros_like(b_fine)
     for i in range(10):
         x0 = two_level_solver(x0)
+        print(f"Iteration {i + 1}")
+    gf_sol = laplace_gen.get_gf(name="Laplace equation solution")
+    gf_sol.vec.FV().NumPy()[:] = x0
+    ng.Draw(gf_sol, mesh, "Laplace equation solution")
+    input("Press Enter to continue...")
+
+    x0 = np.zeros_like(b_fine)
+    for i in range(10):
+        x0 = two_level_solver_2(x0)
         print(f"Iteration {i + 1}")
     gf_sol = laplace_gen.get_gf(name="Laplace equation solution")
     gf_sol.vec.FV().NumPy()[:] = x0
