@@ -5,25 +5,99 @@ Linear algebra solvers
 import numpy as np
 
 
-def forward_substitution(L, b):
+def coordinate_descent(matrix, x, r, i):
     """
-    Forward substitution solver for a lower triangular matrix L
+    Do coordinate descent on the linear system Ax = b,
+    for a given guess x and residual r = b - Ax.
     """
-    n = len(b)
-    y = np.zeros(n)
-    y[0] = b[0] / L[0, 0]
-    for i in range(1, n):
-        y[i] = (b[i] - np.dot(L[i, :i], y[:i])) / L[i, i]
-    return y
+    try:
+        assert r.shape[0] == matrix.shape[0], "Dimension mismatch"
+    except AssertionError as e:
+        print(f"Error: {e}")
+        print("Cast r to a 1D array")
+        r = np.ravel(r)
+    t = r[i] / matrix[i, i]  # Compute the step size
+    x[i] += t  # Update x[i]
+    temp = t * matrix[:, i]  # Compute the update to the residual
+    temp = np.ravel(temp)
+    r -= temp
+    # r -= t * matrix[:, i]  # Update the residual
+    return x, r
 
 
-def backward_substitution(U, b):
+def forward_substitution(matrix, x, b):
     """
-    Backward substitution solver for an upper triangular matrix U
+    Do forward substitution on the linear system Ax = b,
+    for a given guess x and residual r = b - Ax.
     """
-    n = len(b)
-    x = np.zeros(n)
-    x[-1] = b[-1] / U[-1, -1]
-    for i in range(n - 2, -1, -1):
-        x[i] = (b[i] - np.dot(U[i, i + 1 :], x[i + 1 :])) / U[i, i]
+    r = b - matrix @ x
+    for i in range(len(x)):
+        x, r = coordinate_descent(matrix, x, r, i)
+    return x, r
+
+
+def backward_substitution(matrix, x, b):
+    """
+    Do backward substitution on the linear system Ax = b,
+    for a given guess x and residual r = b - Ax.
+    """
+    r = b - np.dot(matrix, x)
+    for i in range(len(x) - 1, -1, -1):
+        x, r = coordinate_descent(matrix, x, r, i)
+    return x, r
+
+
+def forward_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=1000, verbose=False):
+    """
+    Solve the linear system Ax = b using the Gauss-Seidel method.
+    """
+    for i in range(max_iter):
+        x, r = forward_substitution(matrix, x, b)
+        if np.linalg.norm(r) < tol:
+            break
+        if verbose:
+            print(f"Iteration {i}: norm = {np.linalg.norm(r)}")
     return x
+
+
+def backward_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=1000, verbose=False):
+    """
+    Solve the linear system Ax = b using the Gauss-Seidel method.
+    """
+    for i in range(max_iter):
+        x, r = backward_substitution(matrix, x, b)
+        if np.linalg.norm(r) < tol:
+            break
+        if verbose:
+            print(f"Iteration {i}: norm = {np.linalg.norm(r)}")
+    return x
+
+
+def test_forward_gauss_seidel():
+    """
+    Test the Gauss-Seidel method.
+    """
+    # Matrix needs to be SPD for Gauss-Seidel to converge
+    matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
+    b = np.dot(matrix, np.array([1.0, 1.0]))
+    x = np.zeros(2)
+    x = forward_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=1000, verbose=True)
+    assert np.allclose(x, np.array([1.0, 1.0]))
+
+
+def test_backward_gauss_seidel():
+    """
+    Test the Gauss-Seidel method.
+    """
+    # Matrix needs to be SPD for Gauss-Seidel to converge
+    matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
+    b = np.dot(matrix, np.array([1.0, 1.0]))
+    x = np.zeros(2)
+    x = backward_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=1000, verbose=True)
+    assert np.allclose(x, np.array([1.0, 1.0]))
+
+
+if __name__ == "__main__":
+    test_forward_gauss_seidel()
+    test_backward_gauss_seidel()
+    print("All tests passed.")

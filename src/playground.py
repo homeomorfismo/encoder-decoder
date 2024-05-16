@@ -12,9 +12,8 @@ from keras import ops
 from geo2d import make_unit_square
 from encoder import PseudoVcycle, PseudoMG
 from data_gen import real_to_complex, complex_to_real, LaplaceDGen
-
-# from metrics import L2ErrorMetric
 from losses import projected_l2_loss
+from solver import forward_gauss_seidel, backward_gauss_seidel
 
 # from fes import assemble, convection_diffusion
 
@@ -311,7 +310,7 @@ def test_vcycle_solver():
     )
 
     # Get linear operators
-    a_fine = laplace_gen.sparse_operator
+    a_fine = laplace_gen.sparse_operator.todense()
 
     def temp_a_coarse(x_coarse):
         x_coarse = x_coarse.reshape((1, vcycle.inner_shape))
@@ -324,7 +323,6 @@ def test_vcycle_solver():
 
     print(f"Shape of the fine operator: {a_fine.shape}")
     print(f"Shape of the coarse operator: {vcycle.inner_shape}")
-    input("Press Enter to continue...")
 
     a_coarse = sp.sparse.linalg.LinearOperator(
         (vcycle.inner_shape, vcycle.inner_shape),
@@ -334,23 +332,30 @@ def test_vcycle_solver():
     # Get right-hand side
     gf = laplace_gen.get_gf(name="1.0")
     gf.Set(1.0)
-    b_fine = gf.vec.FV().NumPy()
+    b_fine = gf.vec.FV().NumPy().copy()
     ng.Draw(gf, mesh, "1.0")
-    input("Press Enter to continue...")
 
     # Assemble a two-level solver
     def two_level_solver(x_fine):
-        r_fine = b_fine - a_fine @ x_fine
-        # Coarse grid correction
-        r_fine = r_fine.reshape((1, vcycle._input_shape[-1]))
-        r_coarse = vcycle.encoder.predict(r_fine).reshape((vcycle.inner_shape,))
-        e_coarse = sp.sparse.linalg.cg(a_coarse, r_coarse)[0]
-        e_coarse = e_coarse.reshape((1, vcycle.inner_shape))
-        e_fine = vcycle.decoder.predict(e_coarse).reshape((vcycle._input_shape[-1],))
+        print("Pre-smoothing")
+        r_fine = np.ravel(b_fine - np.dot(a_fine, x_fine))
+        # r_fine = b_fine - np.dot(a_fine, x_fine)
+        e_fine = forward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-6, max_iter=100)
         x_fine += e_fine
-        # Smoothing
-        r_fine = b_fine - a_fine @ x_fine
-        e_fine = sp.sparse.linalg.cg(a_fine, r_fine)[0]
+        ae_fine = np.ravel(np.dot(a_fine, e_fine))
+        r_fine -= ae_fine
+        print("Coarse grid correction")
+        r_fine = r_fine.reshape((1, vcycle._input_shape[-1]))
+        r_coarse = np.ravel(vcycle.encoder(r_fine))
+        e_coarse = sp.sparse.linalg.cg(a_coarse, r_coarse)[0]
+        # e_coarse = np.linalg.solve(a_coarse, r_coarse)
+        e_coarse = e_coarse.reshape((1, vcycle.inner_shape))
+        e_fine = np.ravel(vcycle.decoder(e_coarse))
+        x_fine += e_fine
+        ae_fine = np.ravel(np.dot(a_fine, e_fine))
+        r_fine -= ae_fine
+        print("Post-smoothing")
+        e_fine = backward_gauss_seidel(a_fine, x_fine, r_fine, tol=1e-6, max_iter=100)
         x_fine += e_fine
         return x_fine
 
