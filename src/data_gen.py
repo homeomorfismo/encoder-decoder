@@ -2,70 +2,16 @@
 Module that generates data for the PseudoVcycle model.
 """
 
-from abc import ABC, abstractmethod  # from deprecated import deprecated
 import ngsolve as ng
 import numpy as np
 import scipy.sparse as sp
 import fes
-import geo2d
+
+from solver import symmetric_gauss_seidel
+from geo2d import make_unit_square
 
 
-class DataGenerator(ABC):
-    """
-    Abstract class for data generators.
-    """
-
-    @abstractmethod
-    def make_operator(self):
-        """
-        Make a linear operator.
-        """
-
-    @abstractmethod
-    def make_sparse_operator(self):
-        """
-        Make a sparse linear operator.
-        """
-
-    @abstractmethod
-    def make_solver(self):
-        """
-        Make a solver.
-        """
-
-    @abstractmethod
-    def make_sparse_solver(self):
-        """
-        Make a sparse solver.
-        """
-
-    @abstractmethod
-    def make_data(self, x):
-        """
-        Make data.
-        """
-
-    @abstractmethod
-    def from_smooth(self, num_samples: int):
-        """
-        Generate data from smooth functions.
-        """
-
-    @abstractmethod
-    def from_random(self, num_samples: int):
-        """
-        Generate data from random vectors.
-        """
-
-    @abstractmethod
-    def get_gf(self):
-        """
-        Get a GridFunction.
-        """
-
-
-####################################################################################################
-class LaplaceDGen(DataGenerator):
+class LaplaceDGen:
     """
     Data generator for the Laplace equation.
     """
@@ -73,7 +19,7 @@ class LaplaceDGen(DataGenerator):
     def __init__(
         self,
         mesh: ng.Mesh,
-        tol: float = 1e-5,
+        tol: float = 1e-3,
         is_complex: bool = True,
     ):
 
@@ -96,63 +42,12 @@ class LaplaceDGen(DataGenerator):
         self.__ng_input = ng.GridFunction(self.__space)
         self.__ng_output = ng.GridFunction(self.__space)
 
-        self.ngsolve_operator = a
-        self.operator = self.make_operator()
-        self.sparse_operator = self.make_sparse_operator()
-        self.tol = tol
-
-        self.solver = self.make_solver()
-        self.sparse_solver = self.make_sparse_solver()
-
-    def make_operator(self):
-        """
-        Make a linear operator.
-
-        Applys the NGSolve operator to a numpy array.
-        Defines a scipy linear operator.
-        """
-
-        def operator(x):
-            self.__ng_input.vec.FV().NumPy()[:] = x
-            self.__ng_output.vec.data = self.ngsolve_operator.mat * self.__ng_input.vec
-            return self.__ng_output.vec.FV().NumPy()
-
-        scipy_operator = sp.linalg.LinearOperator(
-            (self.ngsolve_operator.mat.height, self.ngsolve_operator.mat.width),
-            matvec=operator,
-        )
-        return scipy_operator
-
-    def make_sparse_operator(self):
-        """
-        Make a sparse linear operator.
-
-        Returns a scipy sparse matrix in CSR format, from the NGSolve operator.
-        """
-        a_row, a_col, a_val = self.ngsolve_operator.mat.COO()
-        return sp.csr_matrix(
+        a_row, a_col, a_val = a.mat.COO()
+        self.operator = sp.csr_matrix(
             (a_val, (a_row, a_col)),
-            shape=(self.ngsolve_operator.mat.height, self.ngsolve_operator.mat.width),
-        )
-
-    def make_solver(self):
-        """
-        Make a solver.
-        """
-
-        def error(*args, **kwargs):
-            raise NotImplementedError("Direct solver not implemented.")
-
-        return error
-
-    def make_sparse_solver(self):
-        """
-        Make a sparse solver.
-
-        Returns a sparse solver based on the ILU preconditioner,
-        for the sparse operator (the CSR matrix).
-        """
-        return sp.linalg.spilu(self.sparse_operator, drop_tol=self.tol).solve
+            shape=(a.mat.height, a.mat.width),
+        ).todense()
+        self.tol = tol
 
     def make_data(self, x):
         """
@@ -161,9 +56,9 @@ class LaplaceDGen(DataGenerator):
         Returns the residual of the NGSolve operator applied to x, normalized.
         """
         z = x.copy()
-        ax = self.sparse_operator @ z
-        z -= self.sparse_solver(ax)
-        # z /= np.linalg.norm(z)
+        ax = np.ravel(np.dot(self.operator, x))
+        ma_x = np.ones_like(ax)
+        z -= symmetric_gauss_seidel(self.operator, ma_x, ax, tol=self.tol, max_iter=100)
         z /= np.max(np.abs(z))
         return z
 
@@ -288,5 +183,23 @@ def test_conversions():
     assert np.allclose(test_array, real_to_complex(complex_to_real(test_array)))
 
 
+def test_smooth_data():
+    """
+    Test the generation of data from smooth functions.
+    """
+    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
+    dgen = LaplaceDGen(mesh, tol=1e-2, is_complex=False)
+    x_data = dgen.from_smooth(10, field="real")
+    gf = dgen.get_gf(name="smooth")
+    for i in range(10):
+        gf.vec.FV().NumPy()[:] = x_data[i]
+        ng.Draw(gf, mesh, f"smooth_{i}")
+    x_data = dgen.from_random(10, field="real")
+    for i in range(10):
+        gf.vec.FV().NumPy()[:] = x_data[i]
+        ng.Draw(gf, mesh, f"random_{i}")
+
+
 if __name__ == "__main__":
     test_conversions()
+    test_smooth_data()
