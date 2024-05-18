@@ -13,7 +13,7 @@ from geo2d import make_unit_square
 from encoder import PseudoVcycle, PseudoMG
 from data_gen import real_to_complex, complex_to_real, LaplaceDGen
 from losses import projected_l2_loss
-from solver import forward_gauss_seidel, backward_gauss_seidel
+from solver import forward_gauss_seidel, backward_gauss_seidel, symmetric_gauss_seidel
 
 
 def test_vcycle_complex():
@@ -59,7 +59,6 @@ def test_vcycle_complex():
     vcycle.compile(
         optimizer="adam",
         loss="mean_absolute_error",
-        # metrics=[L2ErrorMetric(space=laplace_gen.ngsolve_operator.space)],
     )
 
     vcycle.fit(
@@ -121,8 +120,8 @@ def test_vcycle_real():
 
     laplace_gen = LaplaceDGen(mesh, tol=1e-1, is_complex=False)
 
-    x_data_smooth = laplace_gen.from_smooth(1000, field="real")
-    x_data_random = laplace_gen.from_random(1000, field="real")
+    x_data_smooth = laplace_gen.from_smooth(3000, field="real")
+    x_data_random = laplace_gen.from_random(3000, field="real")
 
     x_data = np.concatenate((x_data_smooth, x_data_random), axis=0)
     x_data = tf.convert_to_tensor(x_data, dtype=tf.float32)
@@ -133,7 +132,7 @@ def test_vcycle_real():
         x_data.shape[1:],
         num_levels=1,
         compression_factor=5.0,
-        reg_param=1e-5,
+        reg_param=1e-3,
         dtype="float32",
     )
 
@@ -277,7 +276,7 @@ def test_vcycle_solver():
     laplace_gen = LaplaceDGen(mesh, tol=1e-1, is_complex=False)
 
     x_data_smooth = laplace_gen.from_smooth(1000, field="real")
-    x_data_random = laplace_gen.from_random(1000, field="real")
+    x_data_random = laplace_gen.from_random(5000, field="real")
 
     x_data = np.concatenate((x_data_smooth, x_data_random), axis=0)
     x_data = tf.convert_to_tensor(x_data, dtype=tf.float32)
@@ -287,47 +286,33 @@ def test_vcycle_solver():
     vcycle = PseudoVcycle(
         x_data.shape[1:],
         num_levels=1,
-        compression_factor=5.0,
-        reg_param=1e-5,
+        compression_factor=10.0,
+        reg_param=1e-2,
         dtype="float32",
     )
 
     vcycle.compile(
         optimizer="adam",
         loss="mean_absolute_error",
-        # metrics=[L2ErrorMetric(space=laplace_gen.ngsolve_operator.space)],
     )
 
     vcycle.fit(
         x_data,
         x_data,
         epochs=200,
-        batch_size=500,
+        batch_size=100,
         shuffle=True,
         validation_data=(x_data, x_data),
     )
 
     # Get linear operators
-    a_fine = laplace_gen.sparse_operator.todense()
+    a_fine = laplace_gen.operator
 
     decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
     encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
 
-    def temp_a_coarse(x_coarse):
-        return decoder_kernel @ a_fine @ decoder_kernel.T @ x_coarse
-
-    a_coarse = sp.sparse.linalg.LinearOperator(
-        (vcycle.inner_shape, vcycle.inner_shape),
-        matvec=temp_a_coarse,
-    )
-
-    def temp_a_coarse_2(x_coarse):
-        return encoder_kernel.T @ a_fine @ encoder_kernel @ x_coarse
-
-    a_coarse_2 = sp.sparse.linalg.LinearOperator(
-        (vcycle.inner_shape, vcycle.inner_shape),
-        matvec=temp_a_coarse_2,
-    )
+    a_coarse_mat = decoder_kernel @ a_fine @ decoder_kernel.T
+    a_coarse_mat2 = encoder_kernel.T @ a_fine @ encoder_kernel
 
     # Get right-hand side
     gf = laplace_gen.get_gf(name="1.0")
@@ -345,7 +330,10 @@ def test_vcycle_solver():
         print("Coarse grid correction")
         r_fine = np.ravel(r_fine)
         r_coarse = np.ravel(decoder_kernel @ r_fine)
-        e_coarse = sp.sparse.linalg.cg(a_coarse, r_coarse)[0]
+        e_coarse = np.ones_like(r_coarse)
+        e_coarse = symmetric_gauss_seidel(
+            a_coarse_mat, e_coarse, r_coarse, tol=1e-8, max_iter=1_000
+        )
         e_fine = decoder_kernel.T @ e_coarse
         x_fine += e_fine
         r_fine = np.ravel(r_fine - a_fine @ e_fine)
@@ -363,7 +351,10 @@ def test_vcycle_solver():
         print("Coarse grid correction")
         r_fine = np.ravel(r_fine)
         r_coarse = np.ravel(encoder_kernel.T @ r_fine)
-        e_coarse = sp.sparse.linalg.cg(a_coarse_2, r_coarse)[0]
+        e_coarse = np.ones_like(r_coarse)
+        e_coarse = symmetric_gauss_seidel(
+            a_coarse_mat2, e_coarse, r_coarse, tol=1e-8, max_iter=1_000
+        )
         e_fine = encoder_kernel @ e_coarse
         x_fine += e_fine
         r_fine = np.ravel(r_fine - a_fine @ e_fine)
@@ -372,29 +363,43 @@ def test_vcycle_solver():
         x_fine += e_fine
         return x_fine
 
+    def sanity_check(x_fine):
+        print("Sanity check")
+        r_fine = np.ravel(b_fine - a_fine @ x_fine)
+        e_fine = symmetric_gauss_seidel(
+            a_fine, x_fine, r_fine, tol=1e-10, max_iter=1_000
+        )
+        x_fine += e_fine
+        return x_fine
+
     # Solve a problem
     x0 = np.zeros_like(b_fine)
     for i in range(10):
         x0 = two_level_solver(x0)
         print(f"Iteration {i + 1}")
-    gf_sol = laplace_gen.get_gf(name="Laplace equation solution")
+    gf_sol = laplace_gen.get_gf(name="Solution TL solver 1")
     gf_sol.vec.FV().NumPy()[:] = x0
-    ng.Draw(gf_sol, mesh, "Laplace equation solution")
+    ng.Draw(gf_sol, mesh, "Solution TL solver 1")
     input("Press Enter to continue...")
 
     x0 = np.zeros_like(b_fine)
     for i in range(10):
         x0 = two_level_solver_2(x0)
         print(f"Iteration {i + 1}")
-    gf_sol = laplace_gen.get_gf(name="Laplace equation solution")
-    gf_sol.vec.FV().NumPy()[:] = x0
-    ng.Draw(gf_sol, mesh, "Laplace equation solution")
+    gf_sol2 = laplace_gen.get_gf(name="Solution TL solver 2")
+    gf_sol2.vec.FV().NumPy()[:] = x0
+    ng.Draw(gf_sol2, mesh, "Solution TL solver 2")
     input("Press Enter to continue...")
+
+    x0 = np.zeros_like(b_fine)
+    x0 = sanity_check(x0)
+    gf_sol3 = laplace_gen.get_gf(name="Solution sanity check")
+    gf_sol3.vec.FV().NumPy()[:] = x0
+    ng.Draw(gf_sol3, mesh, "Solution sanity check")
 
 
 if __name__ == "__main__":
     # test_vcycle_real()
-    # input("Press Enter to continue...")
     # test_vcycle_complex()
     # input("Press Enter to continue...")
     # test_mg_real()

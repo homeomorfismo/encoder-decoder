@@ -11,7 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from layers import LinearDense
-from regularizers import SymIdL1Regularization
+from regularizers import SymIdL1Regularization, IdRegularization
 from initializers import MatrixInitializer
 
 
@@ -77,7 +77,10 @@ class PseudoVcycle(keras.Model):
                 self.inner_shape,
                 # self.inner_shapes[j],
                 name=f"encoder_{j}",
-                kernel_regularizer=regularizers.L1(self.reg_param),
+                # kernel_regularizer=regularizers.L1(self.reg_param),
+                kernel_regularizer=IdRegularization(
+                    self.reg_param, self._input_shape[-1], transpose=False
+                ),
                 initializer="glorot_uniform",
                 dtype=self.dtype,
             )(x)
@@ -103,8 +106,11 @@ class PseudoVcycle(keras.Model):
                 self._input_shape[-1],
                 # self.inner_shapes[-j+1],
                 name=f"decoder_{j}",
-                kernel_regularizer=SymIdL1Regularization(
-                    self.reg_param, self.encoder.layers[j].get_weights()[0]
+                # kernel_regularizer=SymIdL1Regularization(
+                #     self.reg_param, self.encoder.layers[j].get_weights()[0]
+                # ),
+                kernel_regularizer=IdRegularization(
+                    self.reg_param, self._input_shape[-1], transpose=True
                 ),
                 initializer="zeros",
                 dtype=self.dtype,

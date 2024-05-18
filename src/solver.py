@@ -85,6 +85,13 @@ def symmetric_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=1000, verbose=False)
     return x
 
 
+def l1_smoother():
+    """
+    Solve the linear system Ax = b using the l1 smoother method.
+    """
+    pass
+
+
 # Test functions
 def test_forward_gauss_seidel():
     """
