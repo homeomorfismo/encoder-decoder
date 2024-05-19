@@ -99,10 +99,10 @@ def test_forward_gauss_seidel():
     """
     # Matrix needs to be SPD for Gauss-Seidel to converge
     matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
-    b = np.dot(matrix, np.array([1.0, 1.0]))
-    x = np.zeros(2)
+    b = np.dot(matrix, 2.0 * np.ones(2))
+    x = np.random.rand(2)
     x = forward_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=1000, verbose=True)
-    assert np.allclose(x, np.array([1.0, 1.0]))
+    assert np.allclose(x, 2.0 * np.ones(2))
 
 
 def test_backward_gauss_seidel():
@@ -111,13 +111,29 @@ def test_backward_gauss_seidel():
     """
     # Matrix needs to be SPD for Gauss-Seidel to converge
     matrix = np.array([[4.0, 1.0], [1.0, 3.0]])
-    b = np.dot(matrix, np.array([1.0, 1.0]))
-    x = np.zeros(2)
+    b = np.dot(matrix, 2.0 * np.ones(2))
+    x = np.random.rand(2)
     x = backward_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=1000, verbose=True)
-    assert np.allclose(x, np.array([1.0, 1.0]))
+    assert np.allclose(x, 2.0 * np.ones(2))
+
+
+def test_symmetric_gauss_seidel():
+    """
+    Test the Gauss-Seidel method with forward and backward substitution on a dense matrix.
+    """
+    # Matrix needs to be SPD for Gauss-Seidel to converge
+    matrix = 4.0 * np.eye(20) + np.diag(np.ones(19), 1) + np.diag(np.ones(19), -1)
+    b = np.dot(matrix, 2.0 * np.ones(20))
+    x = np.random.rand(20)
+    x = symmetric_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=1000, verbose=True)
+    assert np.allclose(x, 2.0 * np.ones(20))
 
 
 if __name__ == "__main__":
+    print("Forward Gauss-Seidel")
     test_forward_gauss_seidel()
+    print("Backward Gauss-Seidel")
     test_backward_gauss_seidel()
+    print("Symmetric Gauss-Seidel")
+    test_symmetric_gauss_seidel()
     print("All tests passed.")
