@@ -132,7 +132,7 @@ def test_vcycle_real():
         x_data.shape[1:],
         num_levels=1,
         compression_factor=5.0,
-        reg_param=1e-3,
+        reg_param=1e-5,
         dtype="float32",
     )
 
@@ -398,9 +398,41 @@ def test_vcycle_solver():
     ng.Draw(gf_sol3, mesh, "Solution sanity check")
 
 
+def test_solver():
+    """
+    Test the solver
+    """
+    description = "Test the solver\n"
+    print(description)
+
+    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
+    laplace_gen = LaplaceDGen(mesh, tol=1e-1, is_complex=False)
+
+    a = laplace_gen.operator
+
+    gf = laplace_gen.get_gf(name="1.0")
+    gf.Set(1.0)
+    b = gf.vec.FV().NumPy().copy()
+
+    x0 = np.zeros_like(b)
+    x0 = symmetric_gauss_seidel(a, x0, b, tol=1e-10, max_iter=1_000)
+    # print(f"Symmetric Gauss-Seidel: {x0}")
+
+    gf_sol = laplace_gen.get_gf(name="Solution")
+    gf_sol.vec.FV().NumPy()[:] = x0
+    ng.Draw(gf_sol, mesh, "Solution")
+
+    a_ng = laplace_gen.ng_operator
+    gf_sol_ng = laplace_gen.get_gf(name="Solution NGSolve")
+    gf_sol_ng.vec.data = a_ng.Inverse(freedofs=laplace_gen.space.FreeDofs()) * gf.vec
+    ng.Draw(gf_sol_ng, mesh, "Solution NGSolve")
+
+
 if __name__ == "__main__":
     # test_vcycle_real()
     # test_vcycle_complex()
     # input("Press Enter to continue...")
     # test_mg_real()
-    test_vcycle_solver()
+    # test_vcycle_solver()
+    # test_solver()
+    pass

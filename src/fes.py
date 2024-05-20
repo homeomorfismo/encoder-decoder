@@ -11,7 +11,11 @@ from ngsolve import (
     H1,
     BilinearForm,
     Mesh,
+    BND,
+    Draw,
+    GridFunction,
 )
+import numpy as np
 from geo2d import make_unit_square
 
 
@@ -61,7 +65,7 @@ def convection_diffusion(
     return a, m, fes
 
 
-if __name__ == "__main__":
+def test_convection_diffusion():
     mesh = Mesh(make_unit_square().GenerateMesh(maxh=0.1))
     matrix = CoefficientFunction((1.0, 0.0, 0.0, 1.0), dims=(2, 2))
     vector = CoefficientFunction((0.0, 0.0))
@@ -81,3 +85,53 @@ if __name__ == "__main__":
         f"\ta: {a_mat}\n"
         f"\tm: {m_mat}\n"
     )
+
+
+def test_vectors():
+    """
+    Test vector coefficients
+    """
+    mesh = Mesh(make_unit_square().GenerateMesh(maxh=0.1))
+    matrix = CoefficientFunction((1.0, 0.0, 0.0, 1.0), dims=(2, 2))
+    vector = CoefficientFunction((0.0, 0.0))
+    scalar = CoefficientFunction(0.0)
+    a_mat, m_mat, space = convection_diffusion(
+        mesh,
+        matrix_coeff=matrix,
+        vector_coeff=vector,
+        scalar_coeff=scalar,
+        order=1,
+        is_complex=True,
+    )
+
+    free_dofs = space.FreeDofs()
+    free_dofs = np.array([d for d in free_dofs])
+
+    gf = GridFunction(space)
+    man_gf = GridFunction(space)
+    ex_gf = GridFunction(space)
+
+    gf.Set(1.0, BND)
+    Draw(gf, mesh, "gf_ngsolve")
+
+    x = np.zeros_like(man_gf.vec.FV().NumPy())
+    for i in range(len(x)):
+        if not free_dofs[i]:  # BND
+            x[i] = 1.0
+    man_gf.vec.data.FV().NumPy()[:] = x
+    Draw(man_gf, mesh, "gf_manual")
+
+    y = np.ones_like(ex_gf.vec.FV().NumPy())
+    for i in range(len(y)):
+        if not free_dofs[i]:  # BND
+            y[i] = 0.0
+    ex_gf.vec.data.FV().NumPy()[:] = y
+    Draw(ex_gf, mesh, "gf_example")
+
+    print(f"Free dofs: {free_dofs}")
+    print(f"Vector coefficient: {gf.vec.FV().NumPy()}")
+
+
+if __name__ == "__main__":
+    test_convection_diffusion()
+    test_vectors()

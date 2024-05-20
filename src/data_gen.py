@@ -7,7 +7,7 @@ import numpy as np
 import scipy.sparse as sp
 import fes
 
-from solver import symmetric_gauss_seidel
+from solver import symmetric_gauss_seidel, coordinate_descent
 from geo2d import make_unit_square
 
 
@@ -37,16 +37,26 @@ class LaplaceDGen:
         )
         fes.assemble(a)
 
-        self.__space = space
+        self.space = space
+        self.ng_operator = a.mat
         self.__dim = space.mesh.dim
-        self.__ng_input = ng.GridFunction(self.__space)
-        self.__ng_output = ng.GridFunction(self.__space)
+        self.__ng_input = ng.GridFunction(self.space)
+        self.__ng_output = ng.GridFunction(self.space)
+
+        free_dofs = self.space.FreeDofs()
+        self.free_dofs = np.array([d for d in free_dofs])
 
         a_row, a_col, a_val = a.mat.COO()
         self.operator = sp.csr_matrix(
             (a_val, (a_row, a_col)),
             shape=(a.mat.height, a.mat.width),
         ).todense()
+        # I need to restrict the operator to the free dofs
+        self.rest_operator = self.operator.copy()
+        for i in range(self.operator.shape[0]):
+            if i not in self.free_dofs:
+                self.rest_operator[i, :] = 0.0
+                self.rest_operator[:, i] = 0.0
         self.tol = tol
 
     def make_data(self, x):
@@ -57,8 +67,26 @@ class LaplaceDGen:
         """
         z = x.copy()
         ax = np.ravel(np.dot(self.operator, x))
+        # Copy ax and save boundary values
+        ax_bnd = ax.copy()
+        for i in range(self.operator.shape[0]):
+            if i in self.free_dofs:
+                ax_bnd[i] = 0.0
+        # Get residual
+        res = ax - ax_bnd
+        # Set up solver
         ma_x = np.ones_like(ax)
-        z -= symmetric_gauss_seidel(self.operator, ma_x, ax, tol=self.tol, max_iter=100)
+        r = np.ravel(res - self.rest_operator @ ma_x)
+        for _ in range(1_000):
+            for i in range(len(r)):
+                if i in self.free_dofs:
+                    ma_x, r = coordinate_descent(self.rest_operator, ma_x, r, i)
+            for i in range(len(r) - 1, -1, -1):
+                if i in self.free_dofs:
+                    ma_x, r = coordinate_descent(self.rest_operator, ma_x, r, i)
+            if np.linalg.norm(r) < self.tol:
+                break
+        z -= ma_x + ax_bnd
         z /= np.max(np.abs(z))
         return z
 
@@ -74,7 +102,7 @@ class LaplaceDGen:
             alpha = np.random.rand() * 1.0j
         else:
             alpha = np.random.rand() + np.random.rand() * 1.0j
-        gf = ng.GridFunction(self.__space)
+        gf = ng.GridFunction(self.space)
         x_data = ng.MultiVector(gf.vec, num_samples)
         for i in range(1, num_samples + 1):
             if self.__dim == 1:
@@ -126,7 +154,7 @@ class LaplaceDGen:
             alpha = np.random.rand() * 1.0j
         else:
             alpha = np.random.rand() + np.random.rand() * 1.0j
-        gf = ng.GridFunction(self.__space)
+        gf = ng.GridFunction(self.space)
         x_data = ng.MultiVector(gf.vec, num_samples)
         for i in range(num_samples):
             x_data[i].SetRandom()
@@ -138,7 +166,7 @@ class LaplaceDGen:
         """
         Get a GridFunction.
         """
-        return ng.GridFunction(self.__space, name=name)
+        return ng.GridFunction(self.space, name=name)
 
 
 ####################################################################################################
@@ -188,16 +216,30 @@ def test_smooth_data():
     Test the generation of data from smooth functions.
     """
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
+    dgen = LaplaceDGen(mesh, tol=1e-10, is_complex=False)
+    x_data_smooth = dgen.from_smooth(10, field="real")
+    x_data_random = dgen.from_random(10, field="real")
+
+    gf_smooth = ng.GridFunction(dgen.space, name="smooth", multidim=10)
+    gf_random = ng.GridFunction(dgen.space, name="random", multidim=10)
+
+    for i in range(10):
+        gf_smooth.vecs[i].FV().NumPy()[:] = x_data_smooth[i]
+        gf_random.vecs[i].FV().NumPy()[:] = x_data_random[i]
+
+    ng.Draw(gf_smooth, mesh, "smooth")
+    ng.Draw(gf_random, mesh, "random")
+
+
+def test_operators():
+    """
+    Test the generation of operators.
+    """
+    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
     dgen = LaplaceDGen(mesh, tol=1e-2, is_complex=False)
-    x_data = dgen.from_smooth(10, field="real")
-    gf = dgen.get_gf(name="smooth")
-    for i in range(10):
-        gf.vec.FV().NumPy()[:] = x_data[i]
-        ng.Draw(gf, mesh, f"smooth_{i}")
-    x_data = dgen.from_random(10, field="real")
-    for i in range(10):
-        gf.vec.FV().NumPy()[:] = x_data[i]
-        ng.Draw(gf, mesh, f"random_{i}")
+
+    print(dgen.operator)
+    print(dgen.rest_operator)
 
 
 if __name__ == "__main__":
