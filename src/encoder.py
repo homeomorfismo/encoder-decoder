@@ -26,6 +26,8 @@ class PseudoVcycle(keras.Model):
         num_levels: int = 1,
         compression_factor: float = 2.0,
         reg_param: float = 1.0e-4,
+        initializer_encoder="glorot_uniform",
+        initializer_decoder="zeros",
         dtype="float32",
     ):
         """
@@ -45,6 +47,9 @@ class PseudoVcycle(keras.Model):
         # self.inner_shapes = [int(input_shape[-1] // (compression_factor ** j)) for j in range(1, num_levels + 1)]
         self.reg_param = reg_param
         self._dtype = dtype
+
+        self.initializer_encoder = initializer_encoder
+        self.initializer_decoder = initializer_decoder
 
         self.encoder = self.build_encoder()
         self.decoder = self.build_decoder()
@@ -81,7 +86,7 @@ class PseudoVcycle(keras.Model):
                 kernel_regularizer=IdRegularization(
                     self.reg_param, self._input_shape[-1], transpose=False
                 ),
-                initializer="glorot_uniform",
+                initializer=self.initializer_encoder,
                 dtype=self.dtype,
             )(x)
             encoder_layers.append(x)
@@ -112,7 +117,7 @@ class PseudoVcycle(keras.Model):
                 kernel_regularizer=IdRegularization(
                     self.reg_param, self._input_shape[-1], transpose=True
                 ),
-                initializer="zeros",
+                initializer=self.initializer_decoder,
                 dtype=self.dtype,
             )(x)
             decoder_layers.append(x)

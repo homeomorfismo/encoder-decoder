@@ -1,0 +1,152 @@
+\section{Finite Element setting}
+\label{sec:fem}
+
+We define a test setting for the implementation of the encoder-decoder V-cycle-like method.
+
+Let $\Omega = [0,1]^2 \subset \mathbb{R}^2$ be a square domain.
+We consider the Helmholtz equation with Dirichlet boundary conditions in $\Omega$:
+\begin{subequations}
+    \begin{align}
+        -\Delta u + u &= 1 \quad \text{in } \Omega, \\
+        u &= 0 \quad \text{on } \partial \Omega.
+    \end{align}
+\end{subequations}
+Define the bilinear form \(a(u,v) = \int_{\Omega} \nabla u \cdot \nabla v + \int_{\Omega} uv\) and the linear form \(\ell(v) = \int_{\Omega} v\).
+The weak formulation of this problem is the following:
+find \(u \in \mathring{H}^1(\Omega)\) such that \(a(u,v) = \ell(v)\) for all \(v \in \mathring{H}^1(\Omega)\).
+
+Consider the Lagrange finite elements of degree \(p\) with null trace, denoted by \(\mathring{V}_h \subset \mathring{H}^1(\Omega)\).
+Morevoer, let \(a_h\) and \(\ell_h\) be the restriction of \(a\) and \(\ell\) to \(\mathring{V}_h\), respectively.
+The discrete problem is to find \(u_h \in \mathring{V}_h\) such that \(a_h(u_h,v) = \ell_h(v)\) for all \(v \in \mathring{V}_h\).
+It is well-known the stability and convergence of the Galerkin method for this problem.
+
+Computationaly, it is convenient to consider the Lagrange finite elements of degree \(p\), denoted by \(V_h \subset H^1(\Omega)\).
+We abuse notation and denote by \(a_h\) and \(\ell_h\) the restriction of \(a\) and \(\ell\) to \(V_h\), respectively.
+Notice we can decompose \(V_h = \mathring{V}_h \oplus V_h^\partial\).
+Now, let \( N = \dim(V_h) \) the number of degrees of freedom.
+Upon a choice of basis functions \( \{ \phi_i \}_{i=1}^{N} \) for \(V_h\), we can write the finite element solution as \(u_h = \sum_{i=1}^{N} u_i \phi_i\).
+Define the stiffness matrix \(\mathbf{A} = (A_{ij}) \in \mathbb{R}^{N \times N}\) and the load vector \(\mathbf{b} = (b_i) \in \mathbb{R}^{N}\) such that \(A_{ij} = a_h(\phi_j, \phi_i)\) and \(b_i = \ell_h(\phi_i)\).
+The linear system is then \(\mathbf{A} \mathbf{u} = \mathbf{b}\), where \(\mathbf{u} \in \mathbb{R}^{N}\) is the vector of coefficients of the finite element solution, i.e., \(\mathbf{u} = (u_1, \ldots, u_N)\) and \(u_h = \sum_{i=1}^{N} u_i \phi_i\), \emph{provided} \(u_h \in \mathring{V}_h\), i.e., the trace of \(u_h\) is null.
+
+We highligh that the matrix \(\mathbf{A}\) is symmetric and positive definite.
+Moreover, the matrix \(\mathbf{A}\) and the vector \(\mathbf{b}\) (up to reordering of the basis functions) can be written as
+\begin{align*}
+    \mathbf{A} & = \begin{bmatrix}
+        \mathbf{A}_{\circ, \circ} & \mathbf{A}_{\circ, \partial} \\
+        \mathbf{A}_{\partial, \circ} & \mathbf{A}_{\partial, \partial}
+    \end{bmatrix}, &
+    \mathbf{b} & = \begin{bmatrix}
+        \mathbf{b}_{\circ} \\
+        \mathbf{b}_{\partial}
+    \end{bmatrix},
+\end{align*}
+When the boundary conditions are prescribed and given by \(\mathbf{u}_{\partial}\), we can rewrite the linear system as
+\begin{equation}
+    \begin{bmatrix}
+        \mathbf{A}_{\circ, \circ} & 0 \\
+        0 & \operatorname{diag}(\mathbf{A}_{\partial, \partial})
+    \end{bmatrix}
+    \begin{bmatrix}
+        \mathbf{u}_{\circ} \\
+        \mathbf{u}_{\partial}
+    \end{bmatrix}
+    =
+    \begin{bmatrix}
+        \mathbf{b}_{\circ} - \mathbf{A}_{\circ, \partial} \mathbf{u}_{\partial} \\
+        \operatorname{diag}(\mathbf{A}_{\partial, \partial}) \mathbf{u}_{\partial}
+    \end{bmatrix},
+\end{equation}
+This detail in relevant for the generation of the training data.
+
+\section{Encoder-decoder}
+\label{sec:e-d}
+
+In this section we introduce the encoder-decoder model that we will use to develop a solver for the a finite element problem.
+
+\subsection{Linear encoder-decoder}
+
+We consider a single-layer linear encoder-decoder model.
+We denote by \(\mathbf{W} \in \mathbb{R}^{N \times n}\) the encoder matrix and by \(\mathbf{V} \in \mathbb{R}^{n \times N}\) the decoder matrix.
+The encoder-decoder model is desciber by the two following equations:
+\begin{subequations}
+    \begin{align}
+        \mathbf{y}_\mathrm{c} & = \mathbf{W} \mathbf{u}, \\
+        \mathbf{y} & = \mathbf{V} \mathbf{y}_\mathrm{c},
+    \end{align}
+\end{subequations}
+where \(\mathbf{y} \in \mathbb{R}^{N}\) is the output of the model.
+We denote this operation by \(\mathsf{EDNN}(\mathbf{u}) = \mathbf{y}\).
+
+Consider \( \{ \mathbf{u}^{(i)} \}_{i=1}^{m} \) a set of \(m\) samples of the finite element solution.
+We propose to minimize the following loss function:
+\begin{equation}
+    \mathcal{J}(\mathbf{W}, \mathbf{V}) =
+    \frac{1}{m} \sum_{i=1}^{m} \left\| \mathbf{u}^{(i)} - \mathsf{EDNN}(\mathbf{u}^{(i)}) \right\|_2^2 +
+    \lambda \mathcal{R}(\mathbf{W}, \mathbf{V}),
+\end{equation}
+where \(\lambda > 0\) is a regularization parameter and \(\mathcal{R}(\mathbf{W}, \mathbf{V})\) is a regularization term.
+
+Proposed regularization terms are:
+\begin{subequations}
+    \begin{align}
+        \mathcal{R}_1(\mathbf{W}, \mathbf{V}) &
+        = \left\lVert \mathbf{W} \right\rVert_{\ell^1} + \left\lVert \mathbf{V} \right\rVert_{\ell^1}
+        + \left\lVert \mathbf{W}^T \mathbf{W} - \mathbf{I} \right\rVert_{\ell^1}
+        + \left\lVert \mathbf{V} \mathbf{V}^T - \mathbf{I} \right\rVert_{\ell^1}, \\
+        \mathcal{R}_2(\mathbf{W}, \mathbf{V}) &
+        = \left\lVert \mathbf{W} \right\rVert_{\ell^1} + \left\lVert \mathbf{V} \right\rVert_{\ell^1}
+        + \left\lVert \mathbf{V} \mathbf{W} - \mathbf{I} \right\rVert_{\ell^1}.
+    \end{align}
+\end{subequations}
+
+\subsection{Multigrid-like encoder-decoder}
+
+We add a extra layer to the basic linear encoder-decoder model.
+This layer consists of an application of the original operator from the Galerkin problem.
+We denote by \(\mathbf{W} \in \mathbb{R}^{N \times n}\) the encoder matrix and by \(\mathbf{V} \in \mathbb{R}^{n \times N}\) the decoder matrix.
+The encoder-decoder model is desciber by the three following equations:
+\begin{subequations}
+    \begin{align}
+        \mathbf{y}_\mathrm{c} & = \mathbf{W} \mathbf{u}, \\
+        \mathbf{y}_\mathrm{f} & = \mathbf{V} \mathbf{y}_\mathrm{c}, \\
+        \mathbf{y} & = \mathbf{A} \mathbf{y}_\mathrm{f},
+    \end{align}
+\end{subequations}
+where \(\mathbf{y} \in \mathbb{R}^{N}\) is the output of the model.
+We denote this operation by \(\mathsf{EDNN}_\mathrm{MG}(\mathbf{u}) = \mathbf{y}\).
+
+Consider \( \{ \mathbf{u}^{(i)} \}_{i=1}^{m} \) a set of \(m\) samples of the finite element solution, and define the residuals \(\mathbf{r}^{(i)} = \mathbf{A} \mathbf{u}^{(i)}\).
+We propose to minimize the following loss function:
+\begin{equation}
+    \mathcal{J}(\mathbf{W}, \mathbf{V}) =
+    \sum_{i=1}^{m} \left\lVert \mathbf{V}^T( \mathsf{EDNN}_\mathrm{MG}(\mathbf{u}^{(i)}) - \mathbf{r}^{(i)} ) \right\rVert_2^2 +
+    \lambda \mathcal{R}(\mathbf{W}, \mathbf{V}),
+\end{equation}
+where \(\lambda > 0\) is a regularization parameter and \(\mathcal{R}(\mathbf{W}, \mathbf{V})\) is a regularization term.
+
+Proposed regularization terms are:
+\begin{subequations}
+    \begin{align}
+        \mathcal{R}_1(\mathbf{W}, \mathbf{V}) &
+        = \left\lVert \mathbf{W} \right\rVert_{\ell^1} + \left\lVert \mathbf{V} \right\rVert_{\ell^1}
+        + \left\lVert \mathbf{W}^T \mathbf{W} - \mathbf{I} \right\rVert_{\ell^1}
+        + \left\lVert \mathbf{V} \mathbf{V}^T - \mathbf{I} \right\rVert_{\ell^1}, \\
+        \mathcal{R}_2(\mathbf{W}, \mathbf{V}) &
+        = \left\lVert \mathbf{W} \right\rVert_{\ell^1} + \left\lVert \mathbf{V} \right\rVert_{\ell^1}
+        + \left\lVert \mathbf{V} \mathbf{W} - \mathbf{I} \right\rVert_{\ell^1}.
+    \end{align}
+\end{subequations}
+
+\section{Data generation}
+
+In Section~\ref{sec:fem} we have described a simple example of a finite element problem, which we will use to generate the training data.
+In Section~\ref{sec:e-d} we have described the encoder-decoder models that we will use to develop a solver for the finite element problem.
+Now we require data to train the models.
+
+The main idea is the following: given a set of vectors \( \{ \mathbf{z}^{(i)} \}_{i=1}^{m} \), and a convergent smoother \( \mathbf{M}\) for the operator \(\mathbf{A}\), we can generate \( \mathbf{u}^{(i)} = (\mathbf{I} - \mathbf{M}^{-1} \mathbf{A}) \mathbf{z}^{(i)} \).
+We use a symmetrized Gauss-Seidel smoother as the convergent smoother.
+Notice that we do not keep the boundary conditions in the training data.
+
+[TODO]
+We consider two types of vectors, say randomly generated vectors with entries in \([0,1]\), vectors with entries in \(\{0,1\}\), and interpolation of smooth functions.
+The interpolated functions are of the form \(u_i(x,y) = \sin(2 \pi \alpha_i x) \sin(2 \pi \beta_i y) + \gamma_i\), where \(\alpha_i, \beta_i, \gamma_i\) are randomly generated numbers in \([0,1]\).

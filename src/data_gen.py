@@ -7,25 +7,27 @@ import numpy as np
 import scipy.sparse as sp
 import fes
 
-from solver import symmetric_gauss_seidel, coordinate_descent
+from solver import coordinate_descent
 from geo2d import make_unit_square
 
 
-class LaplaceDGen:
+class HelmholtzDGen:
     """
-    Data generator for the Laplace equation.
+    Data generator for the Helmholtz equation.
     """
 
     def __init__(
         self,
         mesh: ng.Mesh,
         tol: float = 1e-3,
+        iterations: int = 1_000,
         is_complex: bool = True,
+        is_dirichlet: bool = True,
     ):
 
         matrix_coeff = ng.CF((1.0, 0.0, 0.0, 1.0), dims=(2, 2))
         vector_coeff = ng.CF((0.0, 0.0))
-        scalar_coeff = ng.CF(0.0)
+        scalar_coeff = ng.CF(1.0)
 
         a, _, space = fes.convection_diffusion(
             mesh,
@@ -34,30 +36,32 @@ class LaplaceDGen:
             scalar_coeff,
             order=1,
             is_complex=is_complex,
+            is_dirichlet=is_dirichlet,
         )
         fes.assemble(a)
 
         self.space = space
         self.ng_operator = a.mat
         self.__dim = space.mesh.dim
-        self.__ng_input = ng.GridFunction(self.space)
-        self.__ng_output = ng.GridFunction(self.space)
 
         free_dofs = self.space.FreeDofs()
-        self.free_dofs = np.array([d for d in free_dofs])
+        self.free_dofs = np.array(list(free_dofs))
 
         a_row, a_col, a_val = a.mat.COO()
         self.operator = sp.csr_matrix(
             (a_val, (a_row, a_col)),
             shape=(a.mat.height, a.mat.width),
         ).todense()
-        # I need to restrict the operator to the free dofs
+
         self.rest_operator = self.operator.copy()
         for i in range(self.operator.shape[0]):
-            if i not in self.free_dofs:
+            if not self.free_dofs[i]:
                 self.rest_operator[i, :] = 0.0
                 self.rest_operator[:, i] = 0.0
+                self.rest_operator[i, i] = self.operator[i, i]
+
         self.tol = tol
+        self.iterations = iterations
 
     def make_data(self, x):
         """
@@ -66,27 +70,30 @@ class LaplaceDGen:
         Returns the residual of the NGSolve operator applied to x, normalized.
         """
         z = x.copy()
-        ax = np.ravel(np.dot(self.operator, x))
-        # Copy ax and save boundary values
-        ax_bnd = ax.copy()
-        for i in range(self.operator.shape[0]):
-            if i in self.free_dofs:
-                ax_bnd[i] = 0.0
-        # Get residual
-        res = ax - ax_bnd
+        # Reinforce boundary conditions
+        # for i in range(len(z)):
+        #     if not self.free_dofs[i]:
+        #         z[i] = 0.0
+        # Apply operator
+        b = np.ravel(np.dot(self.operator, z))
+        # Reinforce boundary conditions
+        # for i in range(len(b)):
+        #     if not self.free_dofs[i]:
+        #         b[i] = 0.0
         # Set up solver
-        ma_x = np.ones_like(ax)
-        r = np.ravel(res - self.rest_operator @ ma_x)
-        for _ in range(1_000):
+        ma_x = np.ones_like(b)
+        # r = np.ravel(b - np.dot(self.rest_operator, ma_x))
+        r = np.ravel(b - np.dot(self.operator, ma_x))
+        for _ in range(self.iterations):
             for i in range(len(r)):
-                if i in self.free_dofs:
-                    ma_x, r = coordinate_descent(self.rest_operator, ma_x, r, i)
+                # ma_x, r = coordinate_descent(self.rest_operator, ma_x, r, i)
+                ma_x, r = coordinate_descent(self.operator, ma_x, r, i)
             for i in range(len(r) - 1, -1, -1):
-                if i in self.free_dofs:
-                    ma_x, r = coordinate_descent(self.rest_operator, ma_x, r, i)
+                # ma_x, r = coordinate_descent(self.rest_operator, ma_x, r, i)
+                ma_x, r = coordinate_descent(self.operator, ma_x, r, i)
             if np.linalg.norm(r) < self.tol:
                 break
-        z -= ma_x + ax_bnd
+        z -= ma_x
         z /= np.max(np.abs(z))
         return z
 
@@ -215,8 +222,10 @@ def test_smooth_data():
     """
     Test the generation of data from smooth functions.
     """
-    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
-    dgen = LaplaceDGen(mesh, tol=1e-10, is_complex=False)
+    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.1))
+    dgen = HelmholtzDGen(
+        mesh, tol=1e-1, iterations=0, is_complex=True, is_dirichlet=True
+    )
     x_data_smooth = dgen.from_smooth(10, field="real")
     x_data_random = dgen.from_random(10, field="real")
 
@@ -235,13 +244,14 @@ def test_operators():
     """
     Test the generation of operators.
     """
-    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
-    dgen = LaplaceDGen(mesh, tol=1e-2, is_complex=False)
+    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.1))
+    dgen = HelmholtzDGen(mesh, tol=1e-1, is_complex=False, is_dirichlet=True)
 
     print(dgen.operator)
     print(dgen.rest_operator)
 
 
 if __name__ == "__main__":
-    test_conversions()
+    # test_conversions()
+    # test_operators()
     test_smooth_data()

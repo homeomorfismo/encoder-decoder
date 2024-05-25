@@ -44,6 +44,7 @@ def convection_diffusion(
     scalar_coeff=None,
     order: int = 1,
     is_complex: bool = True,
+    is_dirichlet: bool = True,
 ):
     """
     Assemble the convection-diffusion equation
@@ -51,9 +52,12 @@ def convection_diffusion(
     assert matrix_coeff is not None, "Matrix coefficient must be provided"
     assert vector_coeff is not None, "Vector coefficient must be provided"
     assert scalar_coeff is not None, "Scalar coefficient must be provided"
-    fes = H1(
-        mesh, order=order, complex=is_complex, dirichlet="boundary", autoupdate=True
-    )
+    if is_dirichlet:
+        fes = H1(
+            mesh, order=order, complex=is_complex, dirichlet="boundary", autoupdate=True
+        )
+    else:
+        fes = H1(mesh, order=order, complex=is_complex, autoupdate=True)
     u, v = fes.TnT()
     a = BilinearForm(fes)
     a += matrix_coeff * grad(u) * grad(v) * dx
@@ -61,7 +65,6 @@ def convection_diffusion(
     a += scalar_coeff * u * v * dx
     m = BilinearForm(fes)
     m += u * v * dx
-    # assemble(a, m)
     return a, m, fes
 
 
@@ -95,7 +98,7 @@ def test_vectors():
     matrix = CoefficientFunction((1.0, 0.0, 0.0, 1.0), dims=(2, 2))
     vector = CoefficientFunction((0.0, 0.0))
     scalar = CoefficientFunction(0.0)
-    a_mat, m_mat, space = convection_diffusion(
+    _, _, space = convection_diffusion(
         mesh,
         matrix_coeff=matrix,
         vector_coeff=vector,
@@ -104,8 +107,7 @@ def test_vectors():
         is_complex=True,
     )
 
-    free_dofs = space.FreeDofs()
-    free_dofs = np.array([d for d in free_dofs])
+    free_dofs = np.array(list(space.FreeDofs()))
 
     gf = GridFunction(space)
     man_gf = GridFunction(space)
