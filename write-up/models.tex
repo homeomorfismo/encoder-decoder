@@ -56,7 +56,7 @@ When the boundary conditions are prescribed and given by \(\mathbf{u}_{\partial}
         \operatorname{diag}(\mathbf{A}_{\partial, \partial}) \mathbf{u}_{\partial}
     \end{bmatrix},
 \end{equation}
-This detail in relevant for the generation of the training data.
+This detail is relevant for the generation of the training data.
 
 \section{Encoder-decoder}
 \label{sec:e-d}
@@ -150,3 +150,10 @@ Notice that we do not keep the boundary conditions in the training data.
 [TODO]
 We consider two types of vectors, say randomly generated vectors with entries in \([0,1]\), vectors with entries in \(\{0,1\}\), and interpolation of smooth functions.
 The interpolated functions are of the form \(u_i(x,y) = \sin(2 \pi \alpha_i x) \sin(2 \pi \beta_i y) + \gamma_i\), where \(\alpha_i, \beta_i, \gamma_i\) are randomly generated numbers in \([0,1]\).
+
+\section{Experiments}
+
+We assemble and train the models described in Section~\ref{sec:e-d} using the framework described in Section~\ref{sec:model}.
+NGSolve~\cite{schoberl2014c++} is used to solve the finite element problem and to generate the training data.
+Keras~\cite{chollet2015keras} is used to implement the models and to train them.
+In particular, we use the Adam optimizer~\cite{kingma2014adam} for training.
