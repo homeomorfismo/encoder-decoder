@@ -1,0 +1,26 @@
+% Notation conventions
+
+\appendix
+\section{Notation}
+
+In this section, we summarize the notation used in this paper.
+
+\subsection{Linear algebra and norms}
+
+We denote all computational vectors and matrices with boldface letters; vectors are lowercase and matrices are uppercase.
+% We assume we can reindex the elements of a vector or a matrix, so that we can describe them conveniently.
+
+
+\subsection{Finite element theory}
+
+Consider a domain \(\Omega \subset \mathbb{R}^d\) with boundary \(\partial \Omega\).
+Consider \(\Gamma \subset \partial \Omega\) a subdomain of the boundary with positive measure.
+We denote the standar Sobolev spaces with \(k\)th order derivatives by
+\[
+    H^k(\Omega) = \{ u \in L^2(\Omega) : \partial^\alpha u \in L^2(\Omega) \text{ for all } |\alpha| \leq k \},
+\]
+and the space of functions with zero trace on \(\Gamma\) by
+\[
+    \mathring{H}^k(\Omega)_\Gamma = \{ u \in H^k(\Omega) : u = 0 \text{ on } \Gamma \}.
+\]
+In particular, if \(\Gamma = \partial \Omega\), we write \(\mathring{H}^k(\Omega) = \mathring{H}^k(\Omega)_{\partial \Omega}\).

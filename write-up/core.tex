@@ -39,7 +39,7 @@
 \fi
 
 \input{packages}
-\input{preamble}
+% \input{preamble}
 
 \ifdefined\LOGO
     \logo{\includegraphics[width=0.1\textwidth]{\LOGO}}
@@ -54,6 +54,7 @@
 \fi
 
 % Document
+\input{commands}
 \begin{document}
 
 % ARTICLE/AMSART
@@ -63,7 +64,6 @@
 % \begin{abstract}\end{abstract}
 
 \input{models}
-\input{implementation}
 
 % BIBTEX
 \bibliographystyle{abbrv}

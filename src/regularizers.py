@@ -12,7 +12,7 @@ class SymL1Regularization(regularizers.Regularizer):
     """
     L1 regularization for symmetric matrices.
     Given an input matrix V, the symmetric L1 regularization term is the sum of
-        ||W - V^T||_1 + ||W||_1
+        ||W - V^T||_2 + ||W||_1
     """
 
     def __init__(self, strength: float, weight_matrix):
@@ -37,7 +37,7 @@ class SymL1Regularization(regularizers.Regularizer):
             tf.Tensor: The regularization term.
         """
         return self.strength * ops.norm(
-            ops.transpose(W) - self.weight_matrix, ord=1
+            ops.transpose(W) - self.weight_matrix, ord=2
         ) + self.strength * ops.norm(W, ord=1)
 
     def get_config(self):
@@ -54,7 +54,7 @@ class IdL1Regularization(regularizers.Regularizer):
     """
     L1 regularization for identity matrices.
     Given an input matrix V, the identity L1 regularization term is
-        ||W*V - I||_1
+        ||W*V - I||_2 + ||W||_1
     """
 
     def __init__(self, strength: float, weight_matrix):
@@ -80,7 +80,7 @@ class IdL1Regularization(regularizers.Regularizer):
             tf.Tensor: The regularization term.
         """
         return self.strength * ops.norm(
-            ops.matmul(ops.transpose(W), self.weight_matrix) - self.identity, ord=1
+            ops.matmul(ops.transpose(W), self.weight_matrix) - self.identity, ord=2
         ) + self.strength * ops.norm(W, ord=1)
 
     def get_config(self):
@@ -97,7 +97,7 @@ class SymIdL1Regularization(regularizers.Regularizer):
     """
     L1 regularization for symmetric identity matrices.
     Given an input matrix V, the symmetric identity L1 regularization term is the sum of
-        ||W*V - I||_1 + ||W - V^T||_1 + ||W||_1
+        ||V^T*W - I||_2 + ||W - V^T||_2 + ||W||_1
     """
 
     def __init__(self, strength: float, weight_matrix):
@@ -109,9 +109,7 @@ class SymIdL1Regularization(regularizers.Regularizer):
             weight_matrix (tf.Tensor): The matrix V.
         """
         self.strength = strength
-        self.identity = ops.eye(weight_matrix.shape[0])
-        print("debug")
-        print(weight_matrix.shape[0])
+        self.identity = ops.eye(weight_matrix.shape[1])
         self.weight_matrix = ops.transpose(weight_matrix)
 
     def __call__(self, W):
@@ -127,9 +125,9 @@ class SymIdL1Regularization(regularizers.Regularizer):
         return (
             self.strength
             * ops.norm(
-                ops.matmul(ops.transpose(W), self.weight_matrix) - self.identity, ord=1
+                ops.matmul(self.weight_matrix, ops.transpose(W)) - self.identity, ord=2
             )
-            + self.strength * ops.norm(W - self.weight_matrix, ord=1)
+            + self.strength * ops.norm(W - self.weight_matrix, ord=2)
             + self.strength * ops.norm(W, ord=1)
         )
 
@@ -151,7 +149,7 @@ class IdRegularization(regularizers.Regularizer):
     """
     Regularization for identity matrices.
     The identity regularization term is
-        ||W*W^T - I||_2
+        ||W*W^T - I||_2 + ||W||_1
     """
 
     def __init__(self, strength: float, shape: int, transpose=False):
@@ -177,11 +175,11 @@ class IdRegularization(regularizers.Regularizer):
         """
         if self.transpose:
             return self.strength * ops.norm(
-                ops.matmul(ops.transpose(W), W) - self.identity, ord=1
-            )
+                ops.matmul(ops.transpose(W), W) - self.identity, ord=2
+            ) + self.strength * ops.norm(W, ord=1)
         return self.strength * ops.norm(
-            ops.matmul(W, ops.transpose(W)) - self.identity, ord=1
-        )
+            ops.matmul(W, ops.transpose(W)) - self.identity, ord=2
+        ) + self.strength * ops.norm(W, ord=1)
 
     def get_config(self):
         """

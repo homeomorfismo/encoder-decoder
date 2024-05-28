@@ -524,7 +524,7 @@ def test_truncate_weights():
         x_data.shape[1:],
         num_levels=1,
         compression_factor=2.0,
-        reg_param=1e-5,
+        reg_param=1e-3,
         initializer_encoder="glorot_normal",
         initializer_decoder="zeros",
         dtype="float32",
@@ -614,6 +614,6 @@ if __name__ == "__main__":
     # test_vcycle_complex()
     # input("Press Enter to continue...")
     # test_mg_real()
-    test_vcycle_solver()
+    # test_vcycle_solver()
     # test_solver()
-    # test_truncate_weights()
+    test_truncate_weights()

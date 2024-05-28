@@ -74,9 +74,6 @@ class PseudoVcycle(keras.Model):
 
         encoder_layers = []
 
-        # x = layers.Reshape((self.lin_shape,), name="reshape")(x)
-        # encoder_layers.append(x)
-
         for j in range(self.num_levels):
             x = LinearDense(
                 self.inner_shape,
@@ -105,13 +102,17 @@ class PseudoVcycle(keras.Model):
 
         decoder_layers = []
 
-        for j in range(1, self.num_levels + 1):
+        for j in range(self.num_levels):
             x = LinearDense(
                 self._input_shape[-1],
                 # self.inner_shapes[-j+1],
                 name=f"decoder_{j}",
-                kernel_regularizer=IdRegularization(
-                    self.reg_param, self.inner_shape, transpose=False
+                # kernel_regularizer=IdRegularization(
+                #     self.reg_param, self.inner_shape, transpose=False
+                # ),
+                kernel_regularizer=SymIdL1Regularization(
+                    self.reg_param,
+                    self.encoder.get_layer(f"encoder_{self.num_levels - j - 1}").kernel,
                 ),
                 initializer=self.initializer_decoder,
                 dtype=self.dtype,
@@ -224,12 +225,16 @@ class PseudoMG(keras.Model):
 
         decoder_layers = []
 
-        for j in range(1, self.num_levels + 1):
+        for j in range(self.num_levels):
             x = LinearDense(
                 self._input_shape[-1],
                 name=f"decoder_{j}",
-                kernel_regularizer=IdRegularization(
-                    self.reg_param, self.inner_shape, transpose=False
+                # kernel_regularizer=IdRegularization(
+                #     self.reg_param, self.inner_shape, transpose=False
+                # ),
+                kernel_regularizer=SymIdL1Regularization(
+                    self.reg_param,
+                    self.encoder.get_layer(f"encoder_{self.num_levels - j - 1}").kernel,
                 ),
                 initializer=self.initializer_decoder,
                 dtype=self.dtype,
