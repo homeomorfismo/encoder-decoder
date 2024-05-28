@@ -82,9 +82,8 @@ class PseudoVcycle(keras.Model):
                 self.inner_shape,
                 # self.inner_shapes[j],
                 name=f"encoder_{j}",
-                # kernel_regularizer=regularizers.L1(self.reg_param),
                 kernel_regularizer=IdRegularization(
-                    self.reg_param, self._input_shape[-1], transpose=False
+                    self.reg_param, self.inner_shape, transpose=True
                 ),
                 initializer=self.initializer_encoder,
                 dtype=self.dtype,
@@ -111,11 +110,8 @@ class PseudoVcycle(keras.Model):
                 self._input_shape[-1],
                 # self.inner_shapes[-j+1],
                 name=f"decoder_{j}",
-                # kernel_regularizer=SymIdL1Regularization(
-                #     self.reg_param, self.encoder.layers[j].get_weights()[0]
-                # ),
                 kernel_regularizer=IdRegularization(
-                    self.reg_param, self._input_shape[-1], transpose=True
+                    self.reg_param, self.inner_shape, transpose=False
                 ),
                 initializer=self.initializer_decoder,
                 dtype=self.dtype,
@@ -153,6 +149,8 @@ class PseudoMG(keras.Model):
         num_levels: int = 1,
         compression_factor: float = 2.0,
         reg_param: float = 1.0e-4,
+        initializer_encoder="glorot_uniform",
+        initializer_decoder="zeros",
         dtype="float32",
     ):
         """
@@ -170,6 +168,9 @@ class PseudoMG(keras.Model):
         self.inner_shape = int(input_shape[-1] // compression_factor)
         self.reg_param = reg_param
         self._dtype = dtype
+
+        self.initializer_encoder = initializer_encoder
+        self.initializer_decoder = initializer_decoder
 
         self.encoder = self.build_encoder()
         self.decoder = self.build_decoder()
@@ -201,8 +202,10 @@ class PseudoMG(keras.Model):
             x = LinearDense(
                 self.inner_shape,
                 name=f"encoder_{j}",
-                kernel_regularizer=regularizers.L1(self.reg_param),
-                initializer="glorot_uniform",
+                kernel_regularizer=IdRegularization(
+                    self.reg_param, self.inner_shape, transpose=True
+                ),
+                initializer=self.initializer_encoder,
                 dtype=self.dtype,
             )(x)
             encoder_layers.append(x)
@@ -225,10 +228,10 @@ class PseudoMG(keras.Model):
             x = LinearDense(
                 self._input_shape[-1],
                 name=f"decoder_{j}",
-                kernel_regularizer=SymIdL1Regularization(
-                    self.reg_param, self.encoder.layers[j].get_weights()[0]
+                kernel_regularizer=IdRegularization(
+                    self.reg_param, self.inner_shape, transpose=False
                 ),
-                initializer="zeros",
+                initializer=self.initializer_decoder,
                 dtype=self.dtype,
             )(x)
             decoder_layers.append(x)
@@ -284,7 +287,7 @@ ENCODING_DIM = 32
 INPUT_SHAPE = (784,)
 NUM_LEVELS = 1
 COMPRESSION_FACTOR = 24.5
-REG_PARAM = 1.0e-4
+REG_PARAM = 1.0e-2
 DTYPE = "float32"
 
 
