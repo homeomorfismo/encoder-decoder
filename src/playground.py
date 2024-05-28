@@ -300,7 +300,7 @@ def test_vcycle_solver():
         x_data.shape[1:],
         num_levels=1,
         compression_factor=2.0,
-        reg_param=1e-5,
+        reg_param=1e-3,
         dtype="float32",
     )
 
@@ -328,10 +328,11 @@ def test_vcycle_solver():
     decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
     encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
 
-    a_coarse_decoder = decoder_kernel @ a @ decoder_kernel.T + 1e-10 * np.eye(
+    TOL = 1e-10
+    a_coarse_decoder = decoder_kernel @ a @ decoder_kernel.T + TOL * np.eye(
         vcycle.inner_shape
     )
-    a_coarse_encoder = encoder_kernel.T @ a @ encoder_kernel + 1e-10 * np.eye(
+    a_coarse_encoder = encoder_kernel.T @ a @ encoder_kernel + TOL * np.eye(
         vcycle.inner_shape
     )
 
@@ -375,7 +376,7 @@ def test_vcycle_solver():
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = x_fine.copy()
-        for _ in range(100):
+        for _ in range(1000):
             for i in range(len(e_fine)):
                 e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
         x_fine += e_fine

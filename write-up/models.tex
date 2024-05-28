@@ -91,8 +91,8 @@ Proposed regularization terms are:
     \begin{align}
         \mathcal{R}_1(\mathbf{W}, \mathbf{V}) &
         = \left\lVert \mathbf{W} \right\rVert_{\ell^1} + \left\lVert \mathbf{V} \right\rVert_{\ell^1}
-        + \left\lVert \mathbf{W}^T \mathbf{W} - \mathbf{I} \right\rVert_{\ell^1}
-        + \left\lVert \mathbf{V} \mathbf{V}^T - \mathbf{I} \right\rVert_{\ell^1}, \\
+        + \left\lVert \mathbf{W} \mathbf{W}^T - \mathbf{I}_\mathrm{c} \right\rVert_{\ell^1}
+        + \left\lVert \mathbf{V}^T \mathbf{V} - \mathbf{I}_\mathrm{c} \right\rVert_{\ell^1}, \\
         \mathcal{R}_2(\mathbf{W}, \mathbf{V}) &
         = \left\lVert \mathbf{W} \right\rVert_{\ell^1} + \left\lVert \mathbf{V} \right\rVert_{\ell^1}
         + \left\lVert \mathbf{V} \mathbf{W} - \mathbf{I} \right\rVert_{\ell^1}.
@@ -129,8 +129,8 @@ Proposed regularization terms are:
     \begin{align}
         \mathcal{R}_1(\mathbf{W}, \mathbf{V}) &
         = \left\lVert \mathbf{W} \right\rVert_{\ell^1} + \left\lVert \mathbf{V} \right\rVert_{\ell^1}
-        + \left\lVert \mathbf{W}^T \mathbf{W} - \mathbf{I} \right\rVert_{\ell^1}
-        + \left\lVert \mathbf{V} \mathbf{V}^T - \mathbf{I} \right\rVert_{\ell^1}, \\
+        + \left\lVert \mathbf{W} \mathbf{W}^T - \mathbf{I}_\mathrm{c} \right\rVert_{\ell^1}
+        + \left\lVert \mathbf{V}^T \mathbf{V} - \mathbf{I}_\mathrm{c} \right\rVert_{\ell^1}, \\
         \mathcal{R}_2(\mathbf{W}, \mathbf{V}) &
         = \left\lVert \mathbf{W} \right\rVert_{\ell^1} + \left\lVert \mathbf{V} \right\rVert_{\ell^1}
         + \left\lVert \mathbf{V} \mathbf{W} - \mathbf{I} \right\rVert_{\ell^1}.
