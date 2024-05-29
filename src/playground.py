@@ -328,7 +328,7 @@ def test_vcycle_solver():
     decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
     encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
 
-    TOL = 0.0  # 1e-10
+    TOL = 1e-12
     a_coarse_decoder = decoder_kernel @ a @ decoder_kernel.T + TOL * np.eye(
         vcycle.inner_shape
     )
@@ -613,10 +613,10 @@ def test_truncate_weights():
 
 
 if __name__ == "__main__":
-    # test_vcycle_real()
+    test_vcycle_real()
     # test_vcycle_complex()
     # input("Press Enter to continue...")
     # test_mg_real()
-    test_vcycle_solver()
+    # test_vcycle_solver()
     # test_solver()
     # test_truncate_weights()

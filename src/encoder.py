@@ -4,14 +4,19 @@ V-Cycle in a Multigrid solver.
 """
 
 import keras
-from keras import regularizers
+
+# from keras import regularizers
 from keras.datasets import mnist
 from keras import ops
 import numpy as np
 import matplotlib.pyplot as plt
 
 from layers import LinearDense
-from regularizers import SymIdL1Regularization, IdRegularization
+from regularizers import (
+    L1L2ProjectionRegularization,
+    L1L2ProjectionRegularizationParametrizedSymmetric,
+)
+
 from initializers import MatrixInitializer
 
 
@@ -79,9 +84,7 @@ class PseudoVcycle(keras.Model):
                 self.inner_shape,
                 # self.inner_shapes[j],
                 name=f"encoder_{j}",
-                kernel_regularizer=IdRegularization(
-                    self.reg_param, self.inner_shape, transpose=True
-                ),
+                kernel_regularizer=L1L2ProjectionRegularization(self.reg_param),
                 initializer=self.initializer_encoder,
                 dtype=self.dtype,
             )(x)
@@ -107,10 +110,7 @@ class PseudoVcycle(keras.Model):
                 self._input_shape[-1],
                 # self.inner_shapes[-j+1],
                 name=f"decoder_{j}",
-                # kernel_regularizer=IdRegularization(
-                #     self.reg_param, self.inner_shape, transpose=False
-                # ),
-                kernel_regularizer=SymIdL1Regularization(
+                kernel_regularizer=L1L2ProjectionRegularizationParametrizedSymmetric(
                     self.reg_param,
                     self.encoder.get_layer(f"encoder_{self.num_levels - j - 1}").kernel,
                 ),
@@ -203,9 +203,7 @@ class PseudoMG(keras.Model):
             x = LinearDense(
                 self.inner_shape,
                 name=f"encoder_{j}",
-                kernel_regularizer=IdRegularization(
-                    self.reg_param, self.inner_shape, transpose=True
-                ),
+                kernel_regularizer=L1L2ProjectionRegularization(self.reg_param),
                 initializer=self.initializer_encoder,
                 dtype=self.dtype,
             )(x)
@@ -229,10 +227,7 @@ class PseudoMG(keras.Model):
             x = LinearDense(
                 self._input_shape[-1],
                 name=f"decoder_{j}",
-                # kernel_regularizer=IdRegularization(
-                #     self.reg_param, self.inner_shape, transpose=False
-                # ),
-                kernel_regularizer=SymIdL1Regularization(
+                kernel_regularizer=L1L2ProjectionRegularizationParametrizedSymmetric(
                     self.reg_param,
                     self.encoder.get_layer(f"encoder_{self.num_levels - j - 1}").kernel,
                 ),
