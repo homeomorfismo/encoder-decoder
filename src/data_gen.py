@@ -11,6 +11,8 @@ from solver import coordinate_descent
 from geo2d import make_unit_square
 
 
+# TODO Put boundary conditions on the RHS of the equation
+#      so we dont have to destroy the matrix to enforce them
 class HelmholtzDGen:
     """
     Data generator for the Helmholtz equation.

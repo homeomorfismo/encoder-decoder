@@ -328,7 +328,7 @@ def test_vcycle_solver():
     decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
     encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
 
-    TOL = 1e-10
+    TOL = 0.0  # 1e-10
     a_coarse_decoder = decoder_kernel @ a @ decoder_kernel.T + TOL * np.eye(
         vcycle.inner_shape
     )
@@ -361,6 +361,7 @@ def test_vcycle_solver():
     x0 = symmetric_gauss_seidel(a_fine, x0, b, tol=1e-10, max_iter=10_000)
     sol_sgs.vec.FV().NumPy()[:] = x0
     ng.Draw(sol_sgs, mesh, "Solution SGS")
+    input("Press Enter to continue...")
 
     # Two-level solver with decoder kernel
     sol_tl_decoder = helmholtz_gen.get_gf(name="Solution TL decoder")
@@ -372,17 +373,18 @@ def test_vcycle_solver():
         if not free_dofs[i]:
             b[i] = 0.0
 
-    for i in range(3):
+    for _ in range(300):
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = x_fine.copy()
-        for _ in range(1000):
+        for _ in range(2):
             for i in range(len(e_fine)):
                 e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
         x_fine += e_fine
         # Coarse grid correction: Symmetric Gauss-Seidel
         r_coarse = np.ravel(decoder_kernel @ r_fine)
         e_coarse = np.ones_like(r_coarse)
+        # TODO: Use a direct solver here
         for _ in range(10):
             for i in range(len(e_coarse)):
                 e_coarse, r_coarse = coordinate_descent(
@@ -397,7 +399,7 @@ def test_vcycle_solver():
         # Post-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = x_fine.copy()
-        for _ in range(1000):
+        for _ in range(2):
             for i in range(len(e_fine) - 1, -1, -1):
                 e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
         x_fine += e_fine
@@ -415,18 +417,18 @@ def test_vcycle_solver():
         if not free_dofs[i]:
             b[i] = 0.0
 
-    for i in range(333):
+    for _ in range(300):
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = x_fine.copy()
-        for _ in range(30):
+        for _ in range(2):
             for i in range(len(e_fine)):
                 e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
         x_fine += e_fine
         # Coarse grid correction: Symmetric Gauss-Seidel
         r_coarse = np.ravel(encoder_kernel.T @ r_fine)
         e_coarse = np.ones_like(r_coarse)
-        for _ in range(30):
+        for _ in range(10):
             for i in range(len(e_coarse)):
                 e_coarse, r_coarse = coordinate_descent(
                     a_coarse_encoder, e_coarse, r_coarse, i
@@ -440,7 +442,7 @@ def test_vcycle_solver():
         # Post-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = x_fine.copy()
-        for _ in range(30):
+        for _ in range(2):
             for i in range(len(e_fine) - 1, -1, -1):
                 e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
         x_fine += e_fine
@@ -573,6 +575,7 @@ def test_truncate_weights():
     encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
 
     tol = 1e-2
+    # TODO Get complexity of the operators. Cf. class notes
     decoder_kernel[np.abs(decoder_kernel) < tol] = 0.0
     encoder_kernel[np.abs(encoder_kernel) < tol] = 0.0
 
@@ -614,6 +617,6 @@ if __name__ == "__main__":
     # test_vcycle_complex()
     # input("Press Enter to continue...")
     # test_mg_real()
-    # test_vcycle_solver()
+    test_vcycle_solver()
     # test_solver()
-    test_truncate_weights()
+    # test_truncate_weights()
