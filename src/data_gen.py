@@ -22,6 +22,7 @@ class HelmholtzDGen:
         self,
         mesh: ng.Mesh,
         tol: float = 1e-3,
+        order: int = 1,
         iterations: int = 1_000,
         is_complex: bool = True,
         is_dirichlet: bool = True,
@@ -36,7 +37,7 @@ class HelmholtzDGen:
             matrix_coeff,
             vector_coeff,
             scalar_coeff,
-            order=1,
+            order=order,
             is_complex=is_complex,
             is_dirichlet=is_dirichlet,
         )

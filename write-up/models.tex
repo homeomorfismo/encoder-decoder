@@ -17,7 +17,7 @@ find \(u \in \mathring{H}^1(\Omega)\) such that \(a(u,v) = \ell(v)\) for all \(v
 
 Consider the Lagrange finite elements of degree \(p\) with null trace, denoted by \(\mathring{V}_h \subset \mathring{H}^1(\Omega)\).
 Morevoer, let \(a_h\) and \(\ell_h\) be the restriction of \(a\) and \(\ell\) to \(\mathring{V}_h\), respectively.
-The discrete problem is to find \(u_h \in \mathring{V}_h\) such that \(a_h(u_h,v) = \ell_h(v)\) for all \(v \in \mathring{V}_h\).
+The discrete problem is to find \(u_h \in \mathring{V}_h\) such that \(a_h(u_h,v_h) = \ell_h(v_h)\) for all \(v_h \in \mathring{V}_h\).
 It is well-known the stability and convergence of the Galerkin method for this problem.
 
 Computationaly, it is convenient to consider the Lagrange finite elements of degree \(p\), denoted by \(V_h \subset H^1(\Omega)\).
@@ -35,9 +35,13 @@ Moreover, the matrix \(\A\) and the vector \(\mathbf{b}\) (up to reordering of t
         \A_{\circ, \circ} & \A_{\circ, \partial} \\
         \A_{\partial, \circ} & \A_{\partial, \partial}
     \end{bmatrix}, &
-    \mathbf{b} & = \begin{bmatrix}
-        \mathbf{b}_{\circ} \\
-        \mathbf{b}_{\partial}
+    \uu & = \begin{bmatrix}
+        \uu_{\circ} \\
+        \uu_{\partial}
+    \end{bmatrix}, &
+    \bb & = \begin{bmatrix}
+        \bb_{\circ} \\
+        \bb_{\partial}
     \end{bmatrix},
 \end{align*}
 When the boundary conditions are prescribed and given by \(\uu_{\partial}\), we can rewrite the linear system as
@@ -56,7 +60,15 @@ When the boundary conditions are prescribed and given by \(\uu_{\partial}\), we 
         \operatorname{diag}(\A_{\partial, \partial}) \uu_{\partial}
     \end{bmatrix},
 \end{equation}
-This detail is relevant for the generation of the training data.
+[TODO]
+This detail is relevant for the generation of the training data (see Section~\ref{sec:data}), as for the proposed Two-level V-cycle-like methods.
+For convenience, we denote
+\begin{equation}
+    \overline{\A} = \begin{bmatrix}
+        \A_{\circ, \circ} & 0 \\
+        0 & \operatorname{diag}(\A_{\partial, \partial})
+    \end{bmatrix}.
+\end{equation}
 
 \section{Encoder-decoder}
 \label{sec:e-d}
@@ -67,7 +79,7 @@ In this section we introduce the encoder-decoder model that we will use to devel
 
 We consider a single-layer linear encoder-decoder model.
 We denote by \(\W \in \mathbb{R}^{N \times n}\) the encoder matrix and by \(\V \in \mathbb{R}^{n \times N}\) the decoder matrix.
-The encoder-decoder model is desciber by the two following equations:
+The encoder-decoder model is described by the two following equations:
 \begin{subequations}
     \begin{align}
         \yyc & = \W \uu, \\
@@ -86,17 +98,18 @@ We propose to minimize the following loss function:
 \end{equation}
 where \(\lambda > 0\) is a regularization parameter and \(\R(\W, \V)\) is a regularization term.
 
+% Reminder: W:RN to Rnc is encoder, V:Rnc to RN is decoder.
 Proposed regularization terms are:
 \begin{subequations}
+    \label{eq:regularization}
     \begin{align}
         \R_1(\W, \V) &
         = \norm{\W }_{\ell^1} + \norm{\V }_{\ell^1}
-        + \norm{\W \W^T - \I_\mathrm{c} }_{\ell^2}
-        + \norm{\W \V - \I_\mathrm{c} }_{\ell^2}
-        + \norm{\V - \W^T }_{\ell^2}, \\
+        + \norm{\W \W^T - \Ic }_{\ell^2} + \norm{\V \V^T - \Ic }_{\ell^2}
+        + \norm{\W \V - \Ic }_{\ell^2}, \\
         \R_2(\W, \V) &
         = \norm{\W }_{\ell^1} + \norm{\V }_{\ell^1}
-        + \norm{\V \W - \I }_{\ell^1}.
+        + \norm{\W \V - \Ic }_{\ell^2}.
     \end{align}
 \end{subequations}
 
@@ -105,7 +118,7 @@ Proposed regularization terms are:
 We add a extra layer to the basic linear encoder-decoder model.
 This layer consists of an application of the original operator from the Galerkin problem.
 We denote by \(\W \in \mathbb{R}^{N \times n}\) the encoder matrix and by \(\V \in \mathbb{R}^{n \times N}\) the decoder matrix.
-The encoder-decoder model is desciber by the three following equations:
+The encoder-decoder model is described by the three following equations:
 \begin{subequations}
     \begin{align}
         \yyc & = \W \uu, \\
@@ -124,21 +137,11 @@ We propose to minimize the following loss function:
     \lambda \R(\W, \V),
 \end{equation}
 where \(\lambda > 0\) is a regularization parameter and \(\R(\W, \V)\) is a regularization term.
-
-Proposed regularization terms are:
-\begin{subequations}
-    \begin{align}
-        \R_1(\W, \V) &
-        = \norm{\W }_{\ell^1} + \norm{\V }_{\ell^1}
-        + \norm{\W \W^T - \Ic }_{\ell^1}
-        + \norm{\V^T \V - \Ic }_{\ell^1}, \\
-        \R_2(\W, \V) &
-        = \norm{\W }_{\ell^1} + \norm{\V }_{\ell^1}
-        + \norm{\V \W - \I }_{\ell^1}.
-    \end{align}
-\end{subequations}
+We use the same regularization terms as in the linear encoder-decoder model.
+See~\eqref{eq:regularization}.
 
 \section{Data generation}
+\label{sec:data}
 
 In Section~\ref{sec:fem} we have described a simple example of a finite element problem, which we will use to generate the training data.
 In Section~\ref{sec:e-d} we have described the encoder-decoder models that we will use to develop a solver for the finite element problem.
@@ -149,12 +152,75 @@ We use a symmetrized Gauss-Seidel smoother as the convergent smoother.
 Notice that we do not keep the boundary conditions in the training data.
 
 [TODO]
-We consider two types of vectors, say randomly generated vectors with entries in \([0,1]\), vectors with entries in \(\{0,1\}\), and interpolation of smooth functions.
+We consider two types of vectors: randomly generated vectors with entries in \([0,1]\),
+% vectors with entries in \(\{0,1\}\),
+and interpolation of smooth functions.
 The interpolated functions are of the form \(u_i(x,y) = \sin(2 \pi \alpha_i x) \sin(2 \pi \beta_i y) + \gamma_i\), where \(\alpha_i, \beta_i, \gamma_i\) are randomly generated numbers in \([0,1]\).
+
+We employ a symmetrized Gauss-Seidel smoother \(\M_\SGS\) to generate the training data.
+The smoother is applied until the residual is smaller than a given tolerance \(\tol{\SGS} = 0.1\) or until a maximum number of iterations \(\niter{\SGS} = 1.0 \times 10^5\) is reached.
 
 \section{Implementation and numerical experiments}
 
-We assemble and train the models described in Section~\ref{sec:e-d} using the framework described in Section~\ref{sec:model}.
+We assemble and train the models described in Section~\ref{sec:e-d} using the framework described in Section~\ref{sec:fem}.
 NGSolve~\cite{schoberl2014c++} is used to solve the finite element problem and to generate the training data.
 Keras~\cite{chollet2015keras} is used to implement the models and to train them.
 In particular, we use the Adam optimizer~\cite{kingma2014adam} for training.
+
+[TODO]
+We consider the following parameters for the models.
+We discretize the domain \(\Omega = [0,1]^2\) with \(\maxh = 5.0 \times 10^{-2}\).
+We consider lowest-order Lagrange finite elements, i.e., \(p = 1\).
+Regarding the data generation, we consider \(m_\mathrm{rnd} = 1000\) randomly generated vectors and \(m_\mathrm{smo} = 1000\) vectors obtained by interpolation of smooth functions, as described in Section~\ref{sec:data}.
+
+[TODO]
+The basic linear encoder-decoder model is trained is defined in the following way.
+We consider a compression factor of \(\compressionfactor = 5.0\).
+This means that the number of neurons in the hidden layer is \(n = \lfloor N/\compressionfactor \rfloor\).
+We employ a learning rate of \(\learningrate = 0.001\), we train the model for \(n_\mathrm{epochs} = 100\), and we use a batch size of \(n_\mathrm{batch} = 100\).
+We initialize the weights with different strategies, we describe these strategies in Table~\ref{tab:weights}.
+See~\cite{chollet2015keras, glorot2010understanding} for more details.
+
+Due to the nature of the encoder-decoder model, we may not get sparse matrices \(\W\) and \(\V\).
+This is because the model is not required to be sparse, and the regularization terms~\eqref{eq:regularization} may not be enough to enforce sparsity.
+Therefore, we consider additional matrices \(\W_\mathrm{t}\) and \(\V_\mathrm{t}\) defined by zeroing out entries of \(\W\) and \(\V\) that are smaller than a given threshold \(\tol{\mathrm{t}} = 1.0 \times 10^{-2}\).
+
+\begin{table}[htbp]
+    \centering
+    \begin{tabular}{c|cccc}
+        \diagbox{Encoder}{Decoder} & \textsc{Glorot uniform} & \textsc{Identity} & \textsc{Zeros} & \textsc{Ones} \\
+        \hline
+        \textsc{Glorot uniform} & \checkmark & \checkmark & \checkmark & \checkmark \\
+        \textsc{Identity} & \checkmark & \checkmark & \checkmark & \checkmark \\
+        \textsc{Zeros} & \checkmark & \checkmark & \checkmark & \checkmark \\
+        \textsc{Ones} & \checkmark & \checkmark & \checkmark & \checkmark \\
+    \end{tabular}
+    \caption{Initialization strategies for the weights.}
+    \label{tab:weights}
+\end{table}
+
+\subsection{Algorithms}
+
+\begin{algorithm}[H]
+    \caption{Data generation for a finite element problem.}
+    \label{alg:data-gen}
+    \KwIn{
+        A PSD operator \(\A\),
+        an \(\A\)-convergent smoother \(\M_\bullet\),
+        a set of (null) vectors \(\{ \zz^{(i)} \}_{i=1}^{m}\),
+        a tolerance \(\tol{\bullet}\),
+        a maximum number of iterations \(\niter{\bullet}\).
+    }
+    \KwResult{
+        A set of vectors \(\{ \zz^{(i)} \}_{i=1}^{m}\).
+    }
+    \vspace{1cm}
+    \For{\(i = 1\) \KwTo \(m\)}{
+        \(\zz^{(i)} \gets \text{random vector}\) \;
+        \(\uu^{(i)} \gets (\I - \M_\bullet^{-1} \A) \zz^{(i)}\) \;
+        \While{\(\norm{\A \uu^{(i)} - \zz^{(i)}} > \tol{\bullet}\) \textbf{and} \(\niter{\bullet} > 0\)}{
+            \(\uu^{(i)} \gets \M_\bullet^{-1} \A \uu^{(i)}\) \;
+            \(\niter{\bullet} \gets \niter{\bullet} - 1\) \;
+        }
+    }
+\end{algorithm}

@@ -1,6 +1,5 @@
 """
-Playground for testing the encoder-decoder architecture
-"""
+Playground for testing the encoder-decoder architecture """
 
 from functools import partial
 import ngsolve as ng
@@ -138,7 +137,7 @@ def test_vcycle_real():
         x_data.shape[1:],
         num_levels=1,
         compression_factor=2.0,
-        reg_param=1e-3,
+        reg_param=1e-1,
         dtype="float32",
     )
 
@@ -322,17 +321,17 @@ def test_vcycle_solver():
     free_dofs = helmholtz_gen.free_dofs
 
     a_fine = helmholtz_gen.rest_operator
-    a = helmholtz_gen.operator
+    # a = helmholtz_gen.operator
     a_ng = helmholtz_gen.ng_operator
 
-    decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
+    # decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
     encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
 
-    TOL = 1e-12
-    a_coarse_decoder = decoder_kernel @ a @ decoder_kernel.T + TOL * np.eye(
-        vcycle.inner_shape
-    )
-    a_coarse_encoder = encoder_kernel.T @ a @ encoder_kernel + TOL * np.eye(
+    TOL = 0.0
+    # a_coarse_decoder = decoder_kernel @ a_fine @ decoder_kernel.T + TOL * np.eye(
+    #     vcycle.inner_shape
+    # )
+    a_coarse_encoder = encoder_kernel.T @ a_fine @ encoder_kernel + TOL * np.eye(
         vcycle.inner_shape
     )
 
@@ -361,51 +360,40 @@ def test_vcycle_solver():
     x0 = symmetric_gauss_seidel(a_fine, x0, b, tol=1e-10, max_iter=10_000)
     sol_sgs.vec.FV().NumPy()[:] = x0
     ng.Draw(sol_sgs, mesh, "Solution SGS")
-    input("Press Enter to continue...")
 
-    # Two-level solver with decoder kernel
-    sol_tl_decoder = helmholtz_gen.get_gf(name="Solution TL decoder")
+    # # Two-level solver with decoder kernel
+    # sol_tl_decoder = helmholtz_gen.get_gf(name="Solution TL decoder")
 
-    b = b_fine.copy()
-    x_fine = np.random.rand(len(b))
+    # b = b_fine.copy()
+    # x_fine = np.random.rand(len(b))
 
-    for i in range(len(b)):
-        if not free_dofs[i]:
-            b[i] = 0.0
+    # for i in range(len(b)):
+    #     if not free_dofs[i]:
+    #         b[i] = 0.0
 
-    for _ in range(300):
-        # Pre-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = x_fine.copy()
-        for _ in range(2):
-            for i in range(len(e_fine)):
-                e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
-        x_fine += e_fine
-        # Coarse grid correction: Symmetric Gauss-Seidel
-        r_coarse = np.ravel(decoder_kernel @ r_fine)
-        e_coarse = np.ones_like(r_coarse)
-        # TODO: Use a direct solver here
-        for _ in range(10):
-            for i in range(len(e_coarse)):
-                e_coarse, r_coarse = coordinate_descent(
-                    a_coarse_decoder, e_coarse, r_coarse, i
-                )
-            for i in range(len(e_coarse) - 1, -1, -1):
-                e_coarse, r_coarse = coordinate_descent(
-                    a_coarse_decoder, e_coarse, r_coarse, i
-                )
-        e_fine = np.ravel(decoder_kernel.T @ e_coarse)
-        x_fine += e_fine
-        # Post-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = x_fine.copy()
-        for _ in range(2):
-            for i in range(len(e_fine) - 1, -1, -1):
-                e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
-        x_fine += e_fine
+    # for _ in range(300):
+    #     # Pre-smoothing
+    #     r_fine = np.ravel(b - a_fine @ x_fine)
+    #     e_fine = x_fine.copy()
+    #     for _ in range(2):
+    #         for i in range(len(e_fine)):
+    #             e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
+    #     x_fine += e_fine
+    #     # Coarse grid correction
+    #     r_coarse = np.ravel(decoder_kernel @ r_fine)
+    #     e_coarse = sp.linalg.solve(a_coarse_decoder, r_coarse)
+    #     e_fine = np.ravel(decoder_kernel.T @ e_coarse)
+    #     x_fine += e_fine
+    #     # Post-smoothing
+    #     r_fine = np.ravel(b - a_fine @ x_fine)
+    #     e_fine = x_fine.copy()
+    #     for _ in range(2):
+    #         for i in range(len(e_fine) - 1, -1, -1):
+    #             e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
+    #     x_fine += e_fine
 
-    sol_tl_decoder.vec.FV().NumPy()[:] = x_fine
-    ng.Draw(sol_tl_decoder, mesh, "Solution TL decoder")
+    # sol_tl_decoder.vec.FV().NumPy()[:] = x_fine
+    # ng.Draw(sol_tl_decoder, mesh, "Solution TL decoder")
 
     # Two-level solver with encoder kernel
     sol_tl_encoder = helmholtz_gen.get_gf(name="Solution TL encoder")
@@ -425,18 +413,10 @@ def test_vcycle_solver():
             for i in range(len(e_fine)):
                 e_fine, r_fine = coordinate_descent(a_fine, e_fine, r_fine, i)
         x_fine += e_fine
-        # Coarse grid correction: Symmetric Gauss-Seidel
+        # Coarse grid correction
         r_coarse = np.ravel(encoder_kernel.T @ r_fine)
-        e_coarse = np.ones_like(r_coarse)
-        for _ in range(10):
-            for i in range(len(e_coarse)):
-                e_coarse, r_coarse = coordinate_descent(
-                    a_coarse_encoder, e_coarse, r_coarse, i
-                )
-            for i in range(len(e_coarse) - 1, -1, -1):
-                e_coarse, r_coarse = coordinate_descent(
-                    a_coarse_encoder, e_coarse, r_coarse, i
-                )
+        # e_coarse = np.ones_like(r_coarse)
+        e_coarse = sp.linalg.solve(a_coarse_encoder, r_coarse)
         e_fine = np.ravel(encoder_kernel @ e_coarse)
         x_fine += e_fine
         # Post-smoothing
@@ -612,6 +592,98 @@ def test_truncate_weights():
     ng.Draw(gf_transposed, mesh, "transposed(cos(pi*x)*cos(pi*y))")
 
 
+def test_check_sparsity_coarse():
+    """
+    Test the sparsity of the coarse operators
+    """
+    # print(description)
+
+    tf.compat.v1.enable_eager_execution()
+
+    # Set up system
+    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.1))
+    helmholtz_gen = HelmholtzDGen(
+        mesh, tol=1e-1, iterations=1000, is_complex=False, is_dirichlet=True
+    )
+
+    x_data_smooth = helmholtz_gen.from_smooth(500, field="real")
+    x_data_random = helmholtz_gen.from_random(500, field="real")
+
+    x_data = np.concatenate((x_data_smooth, x_data_random), axis=0)
+    x_data = tf.convert_to_tensor(x_data, dtype=tf.float32)
+
+    # Vcycle
+    print("Training Vcycle...")
+
+    vcycle = PseudoVcycle(
+        x_data.shape[1:],
+        num_levels=1,
+        compression_factor=2.0,
+        reg_param=1e-3,
+        dtype="float32",
+    )
+
+    vcycle.compile(
+        optimizer="adam",
+        loss="mean_absolute_error",
+    )
+
+    vcycle.fit(
+        x_data,
+        x_data,
+        epochs=200,
+        batch_size=100,
+        shuffle=True,
+        validation_data=(x_data, x_data),
+    )
+
+    # Get operators
+    # free_dofs = helmholtz_gen.free_dofs
+
+    a_fine = helmholtz_gen.rest_operator
+    a = helmholtz_gen.operator
+    # a_ng = helmholtz_gen.ng_operator
+
+    decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
+    encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
+
+    TOL = 0.0
+    a_coarse_decoder = decoder_kernel @ a @ decoder_kernel.T + TOL * np.eye(
+        vcycle.inner_shape
+    )
+    a_coarse_encoder = encoder_kernel.T @ a @ encoder_kernel + TOL * np.eye(
+        vcycle.inner_shape
+    )
+
+    a_rest_coarse_decoder = decoder_kernel @ a_fine @ decoder_kernel.T + TOL * np.eye(
+        vcycle.inner_shape
+    )
+    a_rest_coarse_encoder = encoder_kernel.T @ a_fine @ encoder_kernel + TOL * np.eye(
+        vcycle.inner_shape
+    )
+
+    a_coarse_decoder = np.abs(a_coarse_decoder)
+    a_coarse_encoder = np.abs(a_coarse_encoder)
+    a_rest_coarse_decoder = np.abs(a_rest_coarse_decoder)
+    a_rest_coarse_encoder = np.abs(a_rest_coarse_encoder)
+
+    fig = px.imshow(a_coarse_decoder, labels=dict(color="Coarse Decoder Operator"))
+    fig.show()
+
+    fig = px.imshow(a_coarse_encoder, labels=dict(color="Coarse Encoder Operator"))
+    fig.show()
+
+    fig = px.imshow(
+        a_rest_coarse_decoder, labels=dict(color="Rest Coarse Decoder Operator")
+    )
+    fig.show()
+
+    fig = px.imshow(
+        a_rest_coarse_encoder, labels=dict(color="Rest Coarse Encoder Operator")
+    )
+    fig.show()
+
+
 if __name__ == "__main__":
     test_vcycle_real()
     # test_vcycle_complex()
@@ -620,3 +692,4 @@ if __name__ == "__main__":
     # test_vcycle_solver()
     # test_solver()
     # test_truncate_weights()
+    # test_check_sparsity_coarse()
