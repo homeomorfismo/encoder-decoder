@@ -147,7 +147,7 @@ In Section~\ref{sec:fem} we have described a simple example of a finite element 
 In Section~\ref{sec:e-d} we have described the encoder-decoder models that we will use to develop a solver for the finite element problem.
 Now we require data to train the models.
 
-The main idea is the following: given a set of vectors \( \{ \zz^{(i)} \}_{i=1}^{m} \), and a convergent smoother \( \M\) for the operator \(\A\), we can generate \( \uu^{(i)} = (\I - \M^{-1} \A) \zz^{(i)} \).
+The main idea is the following: given a set of vectors \( \{ \zz^{(i)} \}_{i=1}^{m} \), and a convergent symmetric smoother \( \M\) for the operator \(\A\), we can generate \( \uu^{(i)} = (\I - \M^{-1} \A) \zz^{(i)} \).
 We use a symmetrized Gauss-Seidel smoother as the convergent smoother.
 Notice that we do not keep the boundary conditions in the training data.
 
@@ -167,6 +167,8 @@ NGSolve~\cite{schoberl2014c++} is used to solve the finite element problem and t
 Keras~\cite{chollet2015keras} is used to implement the models and to train them.
 In particular, we use the Adam optimizer~\cite{kingma2014adam} for training.
 
+\subsection{Parameters for data generation and training}
+
 [TODO]
 We consider the following parameters for the models.
 We discretize the domain \(\Omega = [0,1]^2\) with \(\maxh = 5.0 \times 10^{-2}\).
@@ -180,6 +182,7 @@ This means that the number of neurons in the hidden layer is \(n = \lfloor N/\co
 We employ a learning rate of \(\learningrate = 0.001\), we train the model for \(n_\mathrm{epochs} = 100\), and we use a batch size of \(n_\mathrm{batch} = 100\).
 We initialize the weights with different strategies, we describe these strategies in Table~\ref{tab:weights}.
 See~\cite{chollet2015keras, glorot2010understanding} for more details.
+We use the regularization term~\eqref{eq:regularization} with \(\lambda = 1.0 \times 10^{-3}\).
 
 Due to the nature of the encoder-decoder model, we may not get sparse matrices \(\W\) and \(\V\).
 This is because the model is not required to be sparse, and the regularization terms~\eqref{eq:regularization} may not be enough to enforce sparsity.
@@ -199,28 +202,98 @@ Therefore, we consider additional matrices \(\W_\mathrm{t}\) and \(\V_\mathrm{t}
     \label{tab:weights}
 \end{table}
 
+\subsection{Coarse operator implementation}
+
+After training, the matrices \(\W, \V, \W_\mathrm{t}, \V_\mathrm{t}\) are available.
+We define the following coarse operators:
+\begin{subequations}
+    \begin{align}
+        \A_{\mathrm{c}, \mathrm{d}} & = \V^\mathsf{T} \overline{\A} \V, \\
+        \A_{\mathrm{c}, \mathrm{e}} & = \W \overline{\A} \W^\mathsf{T}, \\
+        \A_{\mathrm{c}, \mathrm{dt}} & = \V_\mathrm{t}^\mathsf{T} \overline{\A} \V_\mathrm{t}, \\
+        \A_{\mathrm{c}, \mathrm{et}} & = \W_\mathrm{t} \overline{\A} \W_\mathrm{t}^\mathsf{T}.
+    \end{align}
+\end{subequations}
+
+
 \subsection{Algorithms}
+
+In the following we describe the algorithms used to generate the training data and to train the models.
 
 \begin{algorithm}[H]
     \caption{Data generation for a finite element problem.}
     \label{alg:data-gen}
+    % \SetKwFunction{InitializeVector}{InitializeVector}
+
     \KwIn{
         A PSD operator \(\A\),
         an \(\A\)-convergent smoother \(\M_\bullet\),
-        a set of (null) vectors \(\{ \zz^{(i)} \}_{i=1}^{m}\),
+        % a set of (null) vectors \(\{ \zz^{(i)} \}_{i=1}^{m}\),
+        a number of desired samples \(m\),
         a tolerance \(\tol{\bullet}\),
         a maximum number of iterations \(\niter{\bullet}\).
+        % Here, \(\bullet \in \{ \SGS, \ell^1\}\).
     }
     \KwResult{
         A set of vectors \(\{ \zz^{(i)} \}_{i=1}^{m}\).
     }
-    \vspace{1cm}
     \For{\(i = 1\) \KwTo \(m\)}{
-        \(\zz^{(i)} \gets \text{random vector}\) \;
-        \(\uu^{(i)} \gets (\I - \M_\bullet^{-1} \A) \zz^{(i)}\) \;
-        \While{\(\norm{\A \uu^{(i)} - \zz^{(i)}} > \tol{\bullet}\) \textbf{and} \(\niter{\bullet} > 0\)}{
-            \(\uu^{(i)} \gets \M_\bullet^{-1} \A \uu^{(i)}\) \;
-            \(\niter{\bullet} \gets \niter{\bullet} - 1\) \;
-        }
+        \(\zz^{(i)} \gets \textsc{InitializeVector}\) \;
+        \(\bb^{(i)} \gets \A \zz^{(i)}\) \;
+        \(\ee^{(i)} \gets \textsc{Solve}(\M_\bullet, \bb^{(i)}; \tol{\bullet}, \niter{\bullet})\) \;
+        \(\zz^{(i)} \gets \zz^{(i)} - \ee^{(i)}\) \;
     }
+\end{algorithm}
+
+\begin{algorithm}[H]
+    \caption{Training a linear encoder-decoder model.}
+    \label{alg:train-lin}
+    \KwIn{
+        A set of vectors \(\{ \zz^{(i)} \}_{i=1}^{m}\),
+        a compression factor \(\compressionfactor\),
+        a learning rate \(\learningrate\),
+        a number of epochs \(n_\mathrm{epochs}\),
+        a batch size \(n_\mathrm{batch}\),
+        a threshold \(\tol{\mathrm{t}}\).
+    }
+    \KwResult{
+        Encoder matrix \(\W\),
+        Decoder matrix \(\V\),
+        Encoder matrix with thresholding \(\W_\mathrm{t}\),
+        Decoder matrix with thresholding \(\V_\mathrm{t}\).
+    }
+    \(\W, \V \gets \textsc{InitializeWeights}\) \;
+    \(\W, \V \gets \textsc{Train}(\W, \V; \{ \zz^{(i)} \}_{i=1}^{m}, \compressionfactor, \learningrate, n_\mathrm{epochs}, n_\mathrm{batch})\) \;
+    \(\W_\mathrm{t}, \V_\mathrm{t} \gets \textsc{Threshold}(\W, \V; \tol{\mathrm{t}})\) \;
+\end{algorithm}
+
+\begin{algorithm}[H]
+    \caption{A two-level method}
+    \label{alg:two-level}
+    \KwIn{
+        A vector \(\uu\),
+        Operator \(\A\),
+        Smoother \(\M\),
+        Projection matrix \(\PP\in\{ \W, \W_\mathrm{t}, \V^\mathsf{T}, \V_\mathrm{t}^\mathsf{T} \}\),
+        Right-hand side \(\bb\),
+    }
+    \KwResult{
+        A vector \(\yy\).
+    }
+    \(\uu \gets \textsc{InitializateVector}\) \;
+    \(\rr \gets \bb - \A \uu\) \;
+    % Pre-smoothing
+    \(\ee \gets \textsc{Solve}(\M, \rr; \tol{\FGS}, \niter{\FGS})\) \;
+    \(\uu \gets \uu + \ee\) \;
+    % Coarse grid correction
+    \(\rr \gets \bb - \A \uu\) \;
+    \(\rrc \gets \PP^\mathsf{T} \rr\) \;
+    \(\Ac \gets \PP^\mathsf{T} \A \PP\) \;
+    \(\yyc \gets \textsc{Solve}( \Ac, \rrc; \tol{}, \niter{})\) \;
+    \(\yyf \gets \PP \yyc\) \;
+    \(\uu \gets \uu + \yyf\) \;
+    % Post-smoothing
+    \(\rr \gets \bb - \A \uu\) \;
+    \(\ee \gets \textsc{Solve}(\M^\mathsf{T}, \rr; \tol{\BGS}, \niter{\BGS})\) \;
+    \(\uu \gets \uu + \ee\) \;
 \end{algorithm}

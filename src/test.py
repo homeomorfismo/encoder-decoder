@@ -14,13 +14,13 @@ from encoder import PseudoVcycle
 from data_gen import HelmholtzDGen
 from solver import symmetric_gauss_seidel, forward_gauss_seidel, backward_gauss_seidel
 
-MAX_H = 0.05
+MAX_H = 0.1
 
 DATA_GEN_TOL = 1e-1
 DATA_GEN_ITER = 1000
 DATA_GEN_NVECS = 1000
 
-VCYCLE_COMPRESSION_FACTOR = 5.0
+VCYCLE_COMPRESSION_FACTOR = 2.0
 VCYCLE_REGULARIZATION = 1.0e-5
 VCYCLE_LEARNING_RATE = 5.0e-4
 VCYCLE_EPOCHS = 200
@@ -252,15 +252,17 @@ def test_all():
         if not free_dofs[i]:
             b[i] = 0.0
 
+    # e_fine = np.zeros_like(x_fine)
+    e_fine = np.random.rand(len(x_fine))
     for _ in range(SOLVER_ITER):
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = np.zeros_like(r_fine)
         e_fine = forward_gauss_seidel(
             a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
         )
         x_fine += e_fine
         # Coarse grid correction
+        r_fine = np.ravel(b - a_fine @ x_fine)
         r_coarse = np.ravel(decoder_kernel @ r_fine)
         try:
             e_coarse = sp.linalg.solve(a_res_coarse_decoder, r_coarse)
@@ -300,15 +302,17 @@ def test_all():
         if not free_dofs[i]:
             b[i] = 0.0
 
+    # e_fine = np.zeros_like(x_fine)
+    e_fine = np.random.rand(len(x_fine))
     for _ in range(SOLVER_ITER):
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = np.zeros_like(r_fine)
         e_fine = forward_gauss_seidel(
             a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
         )
         x_fine += e_fine
         # Coarse grid correction
+        r_fine = np.ravel(b - a_fine @ x_fine)
         r_coarse = np.ravel(encoder_kernel.T @ r_fine)
         try:
             e_coarse = sp.linalg.solve(a_res_coarse_encoder, r_coarse)
@@ -348,15 +352,17 @@ def test_all():
         if not free_dofs[i]:
             b[i] = 0.0
 
+    # e_fine = np.zeros_like(x_fine)
+    e_fine = np.random.rand(len(x_fine))
     for _ in range(SOLVER_ITER):
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = np.zeros_like(r_fine)
         e_fine = forward_gauss_seidel(
             a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
         )
         x_fine += e_fine
         # Coarse grid correction
+        r_fine = np.ravel(b - a_fine @ x_fine)
         r_coarse = np.ravel(truncated_decoder_kernel @ r_fine)
         try:
             e_coarse = sp.linalg.solve(a_res_coarse_truncated_decoder, r_coarse)
@@ -400,15 +406,17 @@ def test_all():
         if not free_dofs[i]:
             b[i] = 0.0
 
+    # e_fine = np.zeros_like(x_fine)
+    e_fine = np.random.rand(len(x_fine))
     for _ in range(SOLVER_ITER):
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = np.zeros_like(r_fine)
         e_fine = forward_gauss_seidel(
             a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
         )
         x_fine += e_fine
         # Coarse grid correction
+        r_fine = np.ravel(b - a_fine @ x_fine)
         r_coarse = np.ravel(truncated_encoder_kernel.T @ r_fine)
         try:
             e_coarse = sp.linalg.solve(a_res_coarse_truncated_encoder, r_coarse)
