@@ -1,0 +1,434 @@
+\documentclass{beamer}
+\usepackage{amsmath, amsfonts, amssymb, amsthm, mathtools, mathrsfs}
+% \usepackage[\LANGUAGE]{babel}
+%\usepackage{bookmark} % bookmark superset hyperref % TODO Why did I prefer hyperref?
+\usepackage{hyperref}
+\usepackage{orcidlink}
+\usepackage{diagbox}
+\usepackage[ruled,vlined]{algorithm2e}
+
+% Improved interfaces
+\usepackage{float, graphicx, caption, subcaption}
+\usepackage{etoolbox} % Allows adding elements at the end of the enviroment
+\usepackage{anyfontsize}
+\usepackage{multirow}
+% \usepackage[dvipsnames]{xcolor}
+
+% TiKz
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric}
+\usetikzlibrary{calc}
+\usetikzlibrary{cd}
+% Norms
+\newcommand{\norm}[1]{\left\lVert #1 \right\rVert}
+% \newcommand{\enorm}[1]{\left\lVert #1 \right\rVert}
+
+% Matrices
+\newcommand{\A}{\mathbf{A}}
+\newcommand{\Ac}{\mathbf{A}_\mathrm{c}}
+\newcommand{\M}{\mathbf{M}}
+\newcommand{\W}{\mathbf{W}}
+\newcommand{\V}{\mathbf{V}}
+\newcommand{\Ic}{\mathbf{I}_\mathrm{c}}
+\newcommand{\I}{\mathbf{I}}
+\newcommand{\PP}{\mathbf{P}}
+
+% Preconditioners/solvers
+\newcommand{\FGS}{\mathrm{FGS}}
+\newcommand{\BGS}{\mathrm{BGS}}
+\newcommand{\SGS}{\mathrm{SGS}}
+
+% Vectors
+\newcommand{\uu}{\mathbf{u}}
+\newcommand{\bb}{\mathbf{b}}
+\newcommand{\yy}{\mathbf{y}}
+\newcommand{\ee}{\mathbf{e}}
+\newcommand{\yyc}{\mathbf{y}_\mathrm{c}}
+\newcommand{\yyf}{\mathbf{y}_\mathrm{f}}
+\newcommand{\rr}{\mathbf{r}}
+\newcommand{\rrc}{\mathbf{r}_\mathrm{c}}
+\newcommand{\rrf}{\mathbf{r}_\mathrm{f}}
+\newcommand{\xx}{\mathbf{x}}
+\newcommand{\zz}{\mathbf{z}}
+
+% Models
+\newcommand{\EDNN}{\mathsf{EDNN}}
+\newcommand{\EDNNMG}{\mathsf{EDNN}_\mathrm{MG}}
+
+% Loss functions
+\newcommand{\J}{\mathcal{J}}
+\newcommand{\R}{\mathcal{R}}
+
+% Parameters
+\newcommand{\tol}[1]{\varepsilon_{#1}}
+\newcommand{\niter}[1]{\nu_{#1}}
+\newcommand{\maxh}{h_{\max}}
+\newcommand{\learningrate}{\eta}
+\newcommand{\compressionfactor}{\alpha}
+\usetheme{Madrid}
+
+\title{Encoder-Decoder Models for Finite Element Problems}
+\author{Gabriel Pinochet-Soto}
+\date{\today}
+
+\begin{document}
+
+\begin{frame}
+\titlepage
+\end{frame}
+
+\begin{frame}{Outline}
+\tableofcontents
+\end{frame}
+
+\section{Goals and punchlines}
+\begin{frame}{Initial goals}
+\begin{itemize}
+    \item Learn a low-dimensional representation of the residuals of a convergent smoother for a linear operator
+    \item Assemble two-level methods for solving linear systems arising from finite element discretization
+    \item Verify the performance of the proposed methods on a simple model problem
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Punchlines}
+\begin{itemize}
+    \item Linear one-layer encoder-decoder models can learn a low-dimensional representation of the residuals of a convergent smoother for a linear operator.
+    \item The encoder and decoder matrices can be thresholded to obtain sparser representations of the projection and interpolation operators.
+    \item The proposed two-level method can be used to solve linear systems arising from finite element discretization.
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Future work}
+\begin{itemize}
+    \item Investigate the performance of the proposed methods on more complex problems.
+    \item Explore the use of more sophisticated encoder-decoder models.
+    \item Study the effect of the regularization term on the performance of the proposed methods.
+    \item And more...
+\end{itemize}
+\end{frame}
+
+\section{From partial differential equations to the finite element method}
+\begin{frame}{If it's linear...}
+    The main goal is to solve \emph{linear} partial differential equations (PDEs) with tools from \emph{linear algebra}.
+
+    \pause
+
+    The outline is the following:
+    \begin{itemize}
+        \item \emph{Formulate} the problem in a setting that is amenable to ensure the existence and uniqueness of the solution.
+        \item \emph{Discretize} the problem to obtain a linear system of equations.
+        \item \emph{Solve} the linear system of equations with tools from linear algebra.
+    \end{itemize}
+
+    \pause
+
+    We may not dive too deep into the details and motivations for partial differential equations...
+\end{frame}
+
+
+\begin{frame}{If it's linear...}
+    We consider a simple model problem.
+    Consider a square domain $\Omega = [0,1]^2 \subset \mathbb{R}^2$.
+    We seek a function $u: \Omega \to \mathbb{R}$ such that
+    \begin{subequations}
+        \label{eq:model_problem}
+        \begin{align}
+            -\Delta u + u &= 1 \quad \text{in } \Omega, \\
+            u &= 0 \quad \text{on } \partial \Omega,
+        \end{align}
+    \end{subequations}
+    where $\Delta$ is the Laplacian operator, i.e., $\Delta u = \partial_{xx} u + \partial_{yy} u$.
+\end{frame}
+
+\begin{frame}{... and it's well-posed ...}
+    We can formulate the problem in a weak sense.
+    Multiply eq.~\eqref{eq:model_problem} by a test function $v \in C_0^\infty(\Omega)$ and integrate over $\Omega$ to obtain
+    \begin{equation*}
+        \int_{\Omega} (-\Delta u + u) v = \int_{\Omega} v.
+    \end{equation*}
+
+    \pause
+
+    Integrations by parts (Green's formula, divergence theorem) yield
+    \begin{equation}
+        \int_{\Omega} \nabla u \cdot \nabla v + \int_{\Omega} uv = \int_{\Omega} v,
+    \end{equation}
+    for all $v \in C_0^\infty(\Omega)$.
+\end{frame}
+
+\begin{frame}{... and it's well-posed ...}
+    We denote these expressions by
+    \begin{align*}
+        a(u,v) &:= \int_{\Omega} \nabla u \cdot \nabla v + \int_{\Omega} uv, \\
+        \ell(v) &:= \int_{\Omega} v.
+    \end{align*}
+
+    \pause
+
+    Some remarkable properties can be higlighted.
+    These are akin to some of the properties we've been using in this course.
+
+    \begin{itemize}
+        \item \emph{Symmetry}: \(a(u,v) = a(v,u)\), by just changing the order of the terms.
+        \item \emph{Continuity}: \(|a(u,v)| \leq \norm{u}_{H^1} \norm{v}_{H^1}\), by Hölder's inequality and Cauchy-Schwarz inequality.
+        \item \emph{Coercivity}: \(a(u,u) \gtrsim \norm{u}_{H^1}^2\), by the Poincaré inequality.
+    \end{itemize}
+    Here, \(u, v \in C_0^\infty(\Omega)\), and \(\norm{\cdot}_{H^1}^2 = \norm{\nabla \cdot}_{L^2}^2 + \norm{\cdot}_{L^2}^2\).
+\end{frame}
+
+\begin{frame}{... and it's well-posed ...}
+    In addition, consider the trace mapping \(\gamma(u) = u|_{\partial \Omega}\) for \(u \in C^\infty(\Omega)\).
+    We want to make sense of the previous formulations in \emph{larger spaces}.
+
+    \pause
+
+    I.e., we would like to extend the problem to a more general setting.
+    Consider the Lebesgue space \(L^2(\Omega)\) of square-integrable functions
+    \begin{equation*}
+        L^2(\Omega) = \left\{ v: \Omega \to \mathbb{R} \mid \int_{\Omega} |v|^2 < \infty \right\}.
+    \end{equation*}
+    and the Sobolev space \(H^1(\Omega)\) of square-integrable functions with square-integrable weak derivatives
+    \begin{equation*}
+        H^1(\Omega) = \left\{ v: \Omega \to \mathbb{R} \mid \int_{\Omega} |v|^2 + \int_{\Omega} |\nabla v|^2 < \infty \right\}.
+    \end{equation*}
+\end{frame}
+
+\begin{frame}{... and it's well-posed ...}
+    Under \emph{fair assumptions on the domain}, we can well-define our mappings.
+
+    \pause
+
+    First, we can extend the trace mapping \(\gamma: H^1(\Omega) \to L^2(\partial \Omega)\) and make sense of the space
+    \begin{equation*}
+        \mathring{H}^1(\Omega) = \left\{ v \in H^1(\Omega) \mid \gamma(v) = 0 \right\}.
+    \end{equation*}
+
+    \pause
+
+    We can then formulate the weak problem in the space \(\mathring{H}^1(\Omega)\) and obtain the existence and uniqueness of the solution.
+
+    \begin{block}{Weak formulation}
+        Find \(u \in \mathring{H}^1(\Omega)\) such that
+        \begin{equation}
+            a(u,v) = \ell(v) \quad \text{for all } v \in \mathring{H}^1(\Omega).
+        \end{equation}
+    \end{block}
+
+    By the Lax-Milgram Theorem, we have the existence and uniqueness of the solution.
+\end{frame}
+
+\begin{frame}{... we may discretize it!}
+    What if we replace these \emph{large spaces} by \emph{finite-dimensional spaces}?
+
+    \pause
+
+    Let \(\Omega_h\) be a \emph{triangulation} of the domain \(\Omega\).
+    The idea is to use a \emph{local finite-dimensional space} to approximate the solution per element \(K \in \Omega_h\).
+    We would like to put a \emph{polynomial} space \(\mathbb{P}^p(K)\) of degree \(p\) on each element.
+    We define the spaces \(V_h\) and \(\mathring{V}_h\) as
+    \begin{subequations}
+        \begin{align}
+            V_h &= \left\{ v_h \in \displaystyle\oplus_{K \in \Omega_h} \mathbb{P}^p(K) \mid v_h \in H^1(\Omega) \right\}, \\
+            \mathring{V}_h &= \left\{ v_h \in V_h \mid \gamma(v_h) = 0 \right\}.
+        \end{align}
+    \end{subequations}
+
+    \pause
+
+    Consider a basis \(\{ \phi_i \}_{i=1}^{N}\) for \(V_h\).
+    We can define the matrix \(\A \in \mathbb{R}^{N \times N}\) and the vector \(\bb \in \mathbb{R}^{N}\), where their entries are defined by
+    \begin{align*}
+        A_{ij} &= a(\phi_i, \phi_j), &
+        b_i &= \ell(\phi_i).
+    \end{align*}
+    If the vector with the coefficients of the solution \(u_h = \sum_{i=1}^{N} u_i \phi_i\) is \(\uu = (u_1, \ldots, u_N)^\mathsf{T}\), we can write the linear system as
+    \begin{equation*}
+        \A \uu = \bb.
+    \end{equation*}
+\end{frame}
+
+\section{Creating projections: Linear encoder-decoder models}
+
+\begin{frame}{Get a projection}
+    Suppose we have a \emph{convergent smoother} \(\M\) for the operator \(\A\).
+    Some questions arise:
+    \begin{itemize}
+        \item Can we learn a \emph{low-dimensional representation} of the residuals of the smoother?
+        \item Can we use this representation to \emph{assemble} a two-level method?
+    \end{itemize}
+
+    \pause
+
+    We can use \emph{linear encoder-decoder models} to learn a low-dimensional representation of the residuals of the smoother.
+\end{frame}
+
+\begin{frame}{Linear Encoder-Decoder}
+    Consider a single-layer linear encoder-decoder model
+    \begin{align*}
+        \yyc &= \W \uu, \\
+        \yy &= \V \yyc,
+    \end{align*}
+    where \(\W \in \mathbb{R}^{N \times n}\) (encoder) and \(\V \in \mathbb{R}^{n \times N}\) (decoder).
+
+    \pause
+
+    We can optimize the model by minimizing the loss function
+    \begin{equation*}
+        \J(\W, \V) = \frac{1}{m} \sum_{i=1}^{m} \left\| \uu^{(i)} - \EDNN(\uu^{(i)}) \right\|_2^2 + \lambda \R(\W, \V),
+    \end{equation*}
+    where \(\EDNN(\uu^{(i)}) = \V \W \uu^{(i)}\) and \(\R(\W, \V)\) is a regularization term.
+\end{frame}
+
+\begin{frame}{Multigrid-like Encoder-Decoder}
+    We can extend the model to include the original operator \(\A\):
+    \begin{align*}
+        \yyc &= \W \uu, \\
+        \yyf &= \V \yyc, \\
+        \yy &= \A \yyf.
+    \end{align*}
+
+    \pause
+
+    The optimization problem is to minimize the loss function
+    \begin{equation*}
+        \J(\W, \V) = \frac{1}{m} \sum_{i=1}^{m} \left\| \V^T( \EDNNMG(\uu^{(i)}) - \mathbf{r}^{(i)} ) \right\|_2^2 + \lambda \R(\W, \V),
+    \end{equation*}
+    where \(\mathbf{r}^{(i)} = \A \uu^{(i)}\).
+\end{frame}
+
+\begin{frame}{Generating data}
+    We can generate training data \(\{ \uu^{(i)} \}_{i=1}^{m}\) from a set of vectors \(\{ \zz^{(i)} \}_{i=1}^{m}\) using a convergent smoother \(\M\) for \(\A\):
+    \begin{equation*}
+        \uu^{(i)} = (\I - \M^{-1} \A) \zz^{(i)}.
+    \end{equation*}
+    Here, \(\zz^{(i)}\) are random vectors or interpolations of smooth functions.
+    We can use the symmetrized Gauss-Seidel smoother \(\M_\SGS\).
+\end{frame}
+
+\section{Diving into initialization, training, and thresholding}
+
+\begin{frame}{Initialization}
+    There are several ways to initialize the encoder and decoder matrices. Some strategies are:
+    \begin{itemize}
+        \item Glorot uniform initialization
+        \item Zero initialization
+        \item Ones initialization
+        \item Identity initialization
+    \end{itemize}
+
+    \pause
+
+    Basically, Glorot uniform initialization is a good initialization strategy for deep neural networks.
+    It is based on the number of input and output units of the layer.
+    This is, each element of the matrix is drawn from a uniform distribution in the interval \([-a, a]\), where \(a = \sqrt{\frac{6}{n_{\mathrm{in}} + n_{\mathrm{out}}}}\).
+
+\end{frame}
+
+\begin{frame}{Training}
+    There are different training strategies for these optimization problems.
+    % A good summary of these strategies is (see \href{On the convergence of Adam and beyond}{https://arxiv.org/pdf/1904.09237.pdf}) described in Algorithm 1 (Generic Adaptive Method Setup):
+    A good summary of these strategies \footnote{On the convergence of Adam and beyond, \url{https://arxiv.org/pdf/1904.09237.pdf}} is described in Algorithm 1 (Generic Adaptive Method Setup):
+\begin{algorithm}[H]
+\caption{Generic Adaptive Method Setup}
+\DontPrintSemicolon
+\KwIn{$x_1 \in \mathcal{F}$, stepsize $\{\alpha_t > 0\}_{t=1}^T$, sequence of functions $\{\phi_t, \psi_t\}_{t=1}^T$}
+\For{$t=1$ \KwTo $T$}{
+    $g_t = \nabla f_t(x_t)$\;
+    $m_t = \phi_t(g_1, \ldots, g_t)$ and $V_t = \psi_t(g_1, \ldots, g_t)$\;
+    $\hat{x}_{t+1} = x_t - \alpha_t \frac{m_t}{\sqrt{V_t}}$\;
+    $x_{t+1} = \Pi_{\mathcal{F}, \sqrt{V_t}}(\hat{x}_{t+1})$\;
+}
+\end{algorithm}
+\end{frame}
+
+\begin{frame}{Training}
+    In the above, \(\phi_t: \mathcal{F}^t \to \mathbb{R}^d\) and \(\psi_t: \mathcal{F}^t \to \mathcal{S}^d_+\) are, loosely speaking, functions that summarize the history of the gradients.
+
+    \pause
+
+    For Stochastic Gradient Descent (SGD), we have \(\phi_t(g_1, \ldots, g_t) = g_t\) and \(\psi_t(g_1, \ldots, g_t) = \I\).
+    The stepsize \(\alpha_t\) is usually a constant or decays over time.
+
+    \pause
+
+    For Adam, given hyperparameters \(\beta_1, \beta_2 \in [0,1)\), we have
+    \begin{align*}
+        \phi_t(g_1, \ldots, g_t) &= (1 - \beta_1) \sum_{i=1}^{t} \beta_1^{t-i} g_i, \\
+        \psi_t(g_1, \ldots, g_t) &= (1 - \beta_2) \operatorname{diag}\left( \sum_{i=1}^{t} \beta_2^{t-i} g_i^2 \right).
+    \end{align*}
+
+    \pause
+
+    These ideas are built upon Gradient Descent: \(x_{t+1} \gets x_t - \alpha_t g_t\).
+\end{frame}
+
+\begin{frame}{Training and data}
+    As processing the whole dataset at once can be computationally expensive, we can use \emph{batches} of the data.
+    The training process is then divided into \emph{epochs}, where each epoch consists of \(n_{\mathrm{batch}}\) batches.
+
+    \pause
+
+    The training process is then:
+    \begin{itemize}
+        \item For each epoch:
+        \begin{itemize}
+            \item For each batch:
+            \begin{itemize}
+                \item Compute the gradients of the loss function with respect to the model parameters.
+                \item Update the model parameters.
+            \end{itemize}
+        \end{itemize}
+    \end{itemize}
+
+    \pause
+
+    The training process is usually stopped after a fixed number of epochs \(n_{\mathrm{epochs}}\) or when the loss function converges.
+\end{frame}
+
+\begin{frame}{Thresholding}
+    We can threshold the encoder and decoder matrices to obtain sparser representations of the projection and interpolation operators.
+    The thresholding tolerance is \(\tol{\mathrm{t}}\).
+    The thresholding operation is, given a matrix \(\W = (w_{ij})\), a matrix \(\W_{\mathrm{t}} = (w_{ij, \mathrm{t}})\) such that
+    \begin{equation*}
+        w_{ij, \mathrm{t}} = \begin{cases}
+            w_{ij} & \text{if } |w_{ij}| > \tol{\mathrm{t}}, \\
+            0 & \text{otherwise}.
+        \end{cases}
+    \end{equation*}
+\end{frame}
+
+
+\section{Assembling two-level methods and implementation}
+\begin{frame}{Implementation details}
+\begin{itemize}
+   \item Finite element problem solved using NGSolve
+   \item Encoder-decoder models implemented and trained using Keras
+   \item Adam optimizer for training
+   \item Lowest-order Lagrange finite elements (\(\mathbb{P}^1\)) on a uniform triangular mesh
+   \item Compression factor $\compressionfactor = 5.0$
+   \item Learning rate $\learningrate = 0.001$, $n_\mathrm{epochs} = 100$, $n_\mathrm{batch} = 100$
+   % \item Regularization term $\R(\W, \V)$
+   \item Thresholding tolerance $\tol{\mathrm{t}} = 10^{-3}$
+   % \item Coarse operators $\A_{\mathrm{c}, \mathrm{d}}$, $\A_{\mathrm{c}, \mathrm{e}}$, $\A_{\mathrm{c}, \mathrm{dt}}$, $\A_{\mathrm{c}, \mathrm{et}}$
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Two-Level Method}
+\begin{itemize}
+   \item Pre-smoothing
+   \item Coarse grid correction
+   \begin{align*}
+       \rrc &\gets \PP^\mathsf{T} \rr \\
+       \Ac &\gets \PP^\mathsf{T} \A \PP \\
+       \yyc &\gets \textsc{Solve}( \Ac, \rrc) \\
+       \yyf &\gets \PP \yyc
+   \end{align*}
+   \item Post-smoothing
+\end{itemize}
+\end{frame}
+
+\begin{frame}{Results}
+    (Live demo)
+\end{frame}
+
+\end{document}
