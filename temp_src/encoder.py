@@ -1,8 +1,161 @@
 """
 Module that contains the encoder-decoder model for mimicking a
 V-Cycle in a Multigrid solver.
-"""
 
+We have four models:
+- DenseVcycle: Encoder-Decoder model for mimicking a V-Cycle in a Multigrid solver.
+- DenseMG: Encoder-Decoder model for mimicking a Multigrid solver.
+- SparseVcycle: Sparse Encoder-Decoder model for mimicking a V-Cycle in a Multigrid solver.
+- SparseMG: Sparse Encoder-Decoder model for mimicking a Multigrid solver.
+
+We base these models on unpublished work by Dr. Panayot Vassilevski and old code
+written by Gabriel Pinochet-Soto.
+"""
+### NEW CODE GOES BELOW ###
+# We use pytorth here, in the new code section!!!
+
+import torch
+import torch.nn as nn
+
+class DenseVcycle(nn.Module):
+    """
+    Dense Encoder-Decoder model for mimicking a V-Cycle in a Multigrid solver.
+    All tensors are assumed to be dense.
+    """
+    def __init__(
+        self,
+        **kwargs
+    ):
+        """
+        Constructor for the DenseVcycle model.
+
+        Required parameters:
+        - input_shape (tuple): Shape of the input tensor.
+        - coarse_shape (tuple): Shape of the coarse (smallest) tensor.
+        
+        Other parameters are stored in a dictionary.
+        """
+        super().__init__()
+
+        required_params = [
+            "input_shape",
+            "coarse_shape",
+        ]
+
+        for param in required_params:
+            assert param in kwargs, f"{param} must be provided."
+
+        self._name = "DenseVcycle"
+        for param, value in kwargs.items():
+            setattr(self, f"_{param}", value)
+
+        self._dict = {}
+        for param, value in kwargs.items():
+            if param not in required_params:
+                self._dict[param] = value
+
+        self.encoder = nn.Linear(
+            in_features=self._input_shape[-1],
+            out_features=self._coarse_shape[-1],
+            bias=False,
+        )
+
+        self.decoder = nn.Linear(
+            in_features=self._coarse_shape[-1],
+            out_features=self._input_shape[-1],
+            bias=False,
+        )
+
+    def forward(self, x):
+        """
+        Forward pass of the model.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        x = self.encoder(x)
+        x = self.decoder(x)
+        return x
+
+class DenseMG(nn.Module):
+    """
+    Dense Encoder-Decoder model for mimicking a Multigrid solver.
+    All tensors are assumed to be dense.
+    """
+    def __init__(
+        self,
+        matrix=None,
+        **kwargs
+    ):
+        """
+        Constructor for the DenseMG model.
+
+        Required parameters:
+        - input_shape (tuple): Shape of the input tensor.
+        - coarse_shape (tuple): Shape of the coarse (smallest) tensor.
+        - matrix (torch.Tensor): Matrix tensor.
+        
+        Other parameters are stored in a dictionary.
+        """
+        assert matrix is not None, "Matrix must be provided."
+        super().__init__()
+
+        required_params = [
+            "input_shape",
+            "coarse_shape",
+        ]
+
+        for param in required_params:
+            assert param in kwargs, f"{param} must be provided."
+
+        self._name = "DenseMG"
+        for param, value in kwargs.items():
+            setattr(self, f"_{param}", value)
+
+        self._dict = {}
+        for param, value in kwargs.items():
+            if param not in required_params:
+                self._dict[param] = value
+
+        self.encoder = nn.Linear(
+            in_features=self._input_shape[-1],
+            out_features=self._coarse_shape[-1],
+            bias=False,
+        )
+
+        self.decoder = nn.Linear(
+            in_features=self._coarse_shape[-1],
+            out_features=self._input_shape[-1],
+            bias=False,
+        )
+
+        self.range_space = nn.Linear(
+            in_features=self._input_shape[-1],
+            out_features=self._coarse_shape[-1],
+            bias=False,
+        )
+        self.range_space.weight = nn.Parameter(matrix, requires_grad=False)
+
+    def forward(self, x):
+        """
+        Forward pass of the model.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        x = self.encoder(x)
+        x = self.decoder(x)
+        x = self.range_space(x)
+        return x
+
+### NEW CODE GOES ABOVE ###
+### OLD CODE GOES BELOW ###
 import keras
 
 # from keras import regularizers
