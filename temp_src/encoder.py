@@ -16,6 +16,19 @@ written by Gabriel Pinochet-Soto.
 
 import torch
 import torch.nn as nn
+import torchvision
+
+def get_device():
+    """
+    Get the device (GPU, MPS, or CPU).
+    """
+    device = (
+        "cuda" if torch.cuda.is_available() else
+        "mps" if torch.backends.mps.is_available() else
+        "cpu"
+    )
+    print(f"Using device: {device}")
+    return device
 
 class DenseVcycle(nn.Module):
     """
@@ -94,9 +107,9 @@ class DenseMG(nn.Module):
         Constructor for the DenseMG model.
 
         Required parameters:
+        - matrix (torch.Tensor): Matrix tensor.
         - input_shape (tuple): Shape of the input tensor.
         - coarse_shape (tuple): Shape of the coarse (smallest) tensor.
-        - matrix (torch.Tensor): Matrix tensor.
         
         Other parameters are stored in a dictionary.
         """
@@ -153,6 +166,119 @@ class DenseMG(nn.Module):
         x = self.decoder(x)
         x = self.range_space(x)
         return x
+
+# Placeholder for SparseVcycle and SparseMG
+
+class SparseVcycle(nn.Module):
+    """
+    Sparse Encoder-Decoder model for mimicking a V-Cycle in a Multigrid solver.
+    All tensors are assumed to be sparse.
+    """
+    def __init__(
+        self,
+        **kwargs
+    ):
+        """
+        Constructor for the SparseVcycle model.
+
+        Required parameters:
+        - input_shape (tuple): Shape of the input tensor.
+        - coarse_shape (tuple): Shape of the coarse (smallest) tensor.
+        
+        Other parameters are stored in a dictionary.
+        """
+        raise NotImplementedError, "SparseVcycle is not implemented yet."
+
+    def forward(self, x):
+        """
+        Forward pass of the model.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        raise NotImplementedError, "SparseVcycle is not implemented yet."
+
+class SparseMG(nn.Module):
+    """
+    Sparse Encoder-Decoder model for mimicking a Multigrid solver.
+    All tensors are assumed to be sparse.
+    """
+    def __init__(
+        self,
+        matrix=None,
+        **kwargs
+    ):
+        """
+        Constructor for the SparseMG model.
+
+        Required parameters:
+        - matrix (torch.Tensor): Matrix tensor.
+        - input_shape (tuple): Shape of the input tensor.
+        - coarse_shape (tuple): Shape of the coarse (smallest) tensor.
+        
+        Other parameters are stored in a dictionary.
+        """
+        raise NotImplementedError, "SparseMG is not implemented yet."
+
+    def forward(self, x):
+        """
+        Forward pass of the model.
+
+        Args:
+            x (torch.Tensor): Input tensor.
+
+        Returns:
+            torch.Tensor: Output tensor.
+        """
+        raise NotImplementedError, "SparseMG is not implemented yet."
+
+# Tests
+def test_dense_vcycle():
+    """
+    Test the DenseVcycle model.
+    Encoding-decoding MNIST data.
+    """
+    import torchvision
+    import matplotlib.pyplot as plt
+
+    device = get_device()
+    model = DenseVcycle(
+        input_shape=(784,),
+        coarse_shape=(32,),
+    ).to(device)
+
+    print(model)
+
+    train_loader = torch.utils.data.DataLoader(
+        torchvision.datasets.MNIST(
+            '/files/',
+            train=True,
+            download=True,
+            transform=torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize((0.1307,), (0.3081,))
+            ])),
+        batch_size=256,
+        shuffle=True,
+    )
+
+    test_loader = torch.utils.data.DataLoader(
+        torchvision.datasets.MNIST(
+            '/files/',
+            train=False,
+            transform=torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize((0.1307,), (0.3081,))
+            ])),
+        batch_size=256,
+        shuffle=True,
+    )
+
+
+
 
 ### NEW CODE GOES ABOVE ###
 ### OLD CODE GOES BELOW ###
