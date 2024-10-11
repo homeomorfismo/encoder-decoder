@@ -11,11 +11,10 @@ We have four models:
 We base these models on unpublished work by Dr. Panayot Vassilevski and old code
 written by Gabriel Pinochet-Soto.
 """
-### NEW CODE GOES BELOW ###
-# We use pytorth here, in the new code section!!!
-
 import torch
 import torch.nn as nn
+import torch.optim as optim
+import torch.functional as functional
 import torchvision
 
 def get_device():
@@ -167,8 +166,6 @@ class DenseMG(nn.Module):
         x = self.range_space(x)
         return x
 
-# Placeholder for SparseVcycle and SparseMG
-
 class SparseVcycle(nn.Module):
     """
     Sparse Encoder-Decoder model for mimicking a V-Cycle in a Multigrid solver.
@@ -187,7 +184,7 @@ class SparseVcycle(nn.Module):
         
         Other parameters are stored in a dictionary.
         """
-        raise NotImplementedError, "SparseVcycle is not implemented yet."
+        raise NotImplementedError
 
     def forward(self, x):
         """
@@ -199,7 +196,7 @@ class SparseVcycle(nn.Module):
         Returns:
             torch.Tensor: Output tensor.
         """
-        raise NotImplementedError, "SparseVcycle is not implemented yet."
+        raise NotImplementedError
 
 class SparseMG(nn.Module):
     """
@@ -221,7 +218,7 @@ class SparseMG(nn.Module):
         
         Other parameters are stored in a dictionary.
         """
-        raise NotImplementedError, "SparseMG is not implemented yet."
+        raise NotImplementedError
 
     def forward(self, x):
         """
@@ -233,9 +230,20 @@ class SparseMG(nn.Module):
         Returns:
             torch.Tensor: Output tensor.
         """
-        raise NotImplementedError, "SparseMG is not implemented yet."
+        raise NotImplementedError
 
-# Tests
+# TESTS
+
+LOCAL_FOLDER = "./tmp"
+def check_directories():
+    """
+    Check if the directories exist.
+    """
+    import os
+    if not os.path.exists(LOCAL_FOLDER + "/results"):
+        os.makedirs(LOCAL_FOLDER + "/results")
+        print(f"Created directories: {LOCAL_FOLDER}/results")
+
 def test_dense_vcycle():
     """
     Test the DenseVcycle model.
@@ -243,18 +251,24 @@ def test_dense_vcycle():
     """
     import torchvision
     import matplotlib.pyplot as plt
+    from torchvision.utils import save_image
 
     device = get_device()
+
     model = DenseVcycle(
         input_shape=(784,),
         coarse_shape=(32,),
     ).to(device)
 
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
+    loss_fn = nn.MSELoss()
+
     print(model)
 
     train_loader = torch.utils.data.DataLoader(
         torchvision.datasets.MNIST(
-            '/files/',
+            LOCAL_FOLDER,
             train=True,
             download=True,
             transform=torchvision.transforms.Compose([
@@ -267,7 +281,7 @@ def test_dense_vcycle():
 
     test_loader = torch.utils.data.DataLoader(
         torchvision.datasets.MNIST(
-            '/files/',
+            LOCAL_FOLDER,
             train=False,
             transform=torchvision.transforms.Compose([
                 torchvision.transforms.ToTensor(),
@@ -277,404 +291,71 @@ def test_dense_vcycle():
         shuffle=True,
     )
 
-
-
-
-### NEW CODE GOES ABOVE ###
-### OLD CODE GOES BELOW ###
-import keras
-
-# from keras import regularizers
-from keras.datasets import mnist
-from keras import ops
-import numpy as np
-import matplotlib.pyplot as plt
-
-from layers import LinearDense
-from regularizers import (
-    L1L2ProjectionRegularization,
-    L1L2ProjectionRegularizationParametrizedSymmetric,
-)
-
-from initializers import MatrixInitializer
-
-
-class PseudoVcycle(keras.Model):
-    """
-    Encoder-Decoder model for mimicking a V-Cycle in a Multigrid solver.
-    """
-
-    def __init__(
-        self,
-        input_shape: tuple,
-        num_levels: int = 1,
-        compression_factor: float = 2.0,
-        reg_param: float = 1.0e-4,
-        initializer_encoder="glorot_uniform",
-        initializer_decoder="zeros",
-        dtype="float32",
-    ):
+    def train(epoch):
         """
-        Constructor for the PseudoVcycle model.
-
-        Args:
-            input_shape (tuple): Shape of the input tensor.
-            num_levels (int): Number of levels in the V-Cycle.
+        Train the model.
         """
-        super().__init__()
+        model.train()
+        train_loss = 0
+        for batch_idx, (data, _) in enumerate(train_loader):
+            data = data.to(device)
+            optimizer.zero_grad()
+            recon_batch = model(data.view(-1, 784))
+            loss = loss_fn(recon_batch, data.view(-1, 784))
+            loss.backward()
+            train_loss += loss.item()
+            optimizer.step()
+        print(f"Epoch: {epoch} Loss: {train_loss / len(train_loader.dataset)}")
 
-        self._name = "PseudoVcycle"
-
-        self._input_shape = input_shape
-        self.num_levels = num_levels
-        self.inner_shape = int(input_shape[-1] // compression_factor)
-        # self.inner_shapes = [int(input_shape[-1] // (compression_factor ** j)) for j in range(1, num_levels + 1)]
-        self.reg_param = reg_param
-        self._dtype = dtype
-
-        self.initializer_encoder = initializer_encoder
-        self.initializer_decoder = initializer_decoder
-
-        self.encoder = self.build_encoder()
-        self.decoder = self.build_decoder()
-
-    @property
-    def dtype(self):
-        return self._dtype
-
-    @dtype.setter
-    def dtype(self, dtype):
-        self._dtype = dtype
-
-    def build_encoder(self):
+    def test(epoch):
         """
-        Build the encoder part of the model.
-
-        Returns:
-            keras.Model: The encoder model.
+        Test the model.
         """
-        inputs = keras.Input(shape=self._input_shape)
-        x = inputs
+        model.eval()
+        test_loss = 0
+        with torch.no_grad():
+            for i, (data, _) in enumerate(test_loader):
+                data = data.to(device)
+                recon_batch = model(data.view(-1, 784))
+                test_loss += loss_fn(recon_batch, data.view(-1, 784)).item()
+                if i == 0:
+                    n = min(data.size(0), 8)
+                    comparison = torch.cat([data.view(-1, 1, 28, 28)[:n],
+                                            recon_batch.view(-1, 1, 28, 28)[:n]])
+                    save_image(
+                        comparison.cpu(),
+                        LOCAL_FOLDER + '/results/reconstruction_' + str(epoch) + '.png',
+                        nrow=n
+                    )
 
-        encoder_layers = []
+        test_loss /= len(test_loader.dataset)
+        print(f"Test set loss: {test_loss}")
 
-        for j in range(self.num_levels):
-            x = LinearDense(
-                self.inner_shape,
-                # self.inner_shapes[j],
-                name=f"encoder_{j}",
-                kernel_regularizer=L1L2ProjectionRegularization(self.reg_param),
-                initializer=self.initializer_encoder,
-                dtype=self.dtype,
-            )(x)
-            encoder_layers.append(x)
+    for epoch in range(1, 11):
+        train(epoch)
+        test(epoch)
+        with torch.no_grad():
+            sample = torch.zeros(64, 32).to(device)
+            # draw a square
+            for i in range(32):
+                if i < 8:
+                    sample[:, i] = 1
+                elif i < 16:
+                    sample[:, i] = 0
+                elif i < 24:
+                    sample[:, i] = 1
+                else:
+                    sample[:, i] = 0
+            sample = model.decoder(sample).cpu()
+            save_image(
+                sample.view(64, 1, 28, 28),
+                LOCAL_FOLDER + '/results/sample_' + str(epoch) + '.png'
+            )
 
-        return keras.Model(inputs, encoder_layers, name="encoder")
-
-    def build_decoder(self):
-        """
-        Build the decoder part of the model.
-
-        Returns:
-            keras.Model: The decoder model.
-        """
-        inputs = keras.Input(shape=(self.inner_shape,))
-        # inputs = keras.Input(shape=(self.inner_shapes[-1],))
-        x = inputs
-
-        decoder_layers = []
-
-        for j in range(self.num_levels):
-            x = LinearDense(
-                self._input_shape[-1],
-                # self.inner_shapes[-j+1],
-                name=f"decoder_{j}",
-                kernel_regularizer=L1L2ProjectionRegularizationParametrizedSymmetric(
-                    self.reg_param,
-                    self.encoder.get_layer(f"encoder_{self.num_levels - j - 1}").kernel,
-                ),
-                initializer=self.initializer_decoder,
-                dtype=self.dtype,
-            )(x)
-            decoder_layers.append(x)
-
-        return keras.Model(inputs, decoder_layers, name="decoder")
-
-    def call(self, inputs, training=None):
-        """
-        Call the model.
-
-        Args:
-            inputs (tf.Tensor): Input tensor.
-            training (bool): Whether the model is training.
-            mask (tf.Tensor): Mask tensor.
-
-        Returns:
-            tf.Tensor: Output tensor.
-        """
-        x = self.encoder(inputs, training=training)
-        x = self.decoder(x, training=training)
-        return x
-
-
-class PseudoMG(keras.Model):
-    """
-    Encoder-Decoder model for mimicking a V-Cycle in a Multigrid solver.
-    """
-
-    def __init__(
-        self,
-        input_shape: tuple,
-        matrix=None,
-        num_levels: int = 1,
-        compression_factor: float = 2.0,
-        reg_param: float = 1.0e-4,
-        initializer_encoder="glorot_uniform",
-        initializer_decoder="zeros",
-        dtype="float32",
-    ):
-        """
-        Constructor fo the PseudoMG model.
-        """
-        assert matrix is not None, "Matrix must be provided."
-        super().__init__()
-
-        self._name = "PseudoMG"
-        self.matrix = matrix
-
-        self._input_shape = input_shape
-        self.num_levels = num_levels
-        # self.inner_shapes = [int(input_shape[-1] // (compression_factor ** j)) for j in range(1, num_levels + 1)]
-        self.inner_shape = int(input_shape[-1] // compression_factor)
-        self.reg_param = reg_param
-        self._dtype = dtype
-
-        self.initializer_encoder = initializer_encoder
-        self.initializer_decoder = initializer_decoder
-
-        self.encoder = self.build_encoder()
-        self.decoder = self.build_decoder()
-        self.range_space = self.build_range_space(self.matrix)
-
-        self.range_space.trainable = False
-
-    @property
-    def dtype(self):
-        return self._dtype
-
-    @dtype.setter
-    def dtype(self, dtype):
-        self._dtype = dtype
-
-    def build_encoder(self):
-        """
-        Build the encoder part of the model.
-
-        Returns:
-            keras.Model: The encoder model.
-        """
-        inputs = keras.Input(shape=self._input_shape)
-        x = inputs
-
-        encoder_layers = []
-
-        for j in range(self.num_levels):
-            x = LinearDense(
-                self.inner_shape,
-                name=f"encoder_{j}",
-                kernel_regularizer=L1L2ProjectionRegularization(self.reg_param),
-                initializer=self.initializer_encoder,
-                dtype=self.dtype,
-            )(x)
-            encoder_layers.append(x)
-
-        return keras.Model(inputs, encoder_layers, name="encoder")
-
-    def build_decoder(self):
-        """
-        Build the decoder part of the model.
-
-        Returns:
-            keras.Model: The decoder model.
-        """
-        inputs = keras.Input(shape=(self.inner_shape,))
-        x = inputs
-
-        decoder_layers = []
-
-        for j in range(self.num_levels):
-            x = LinearDense(
-                self._input_shape[-1],
-                name=f"decoder_{j}",
-                kernel_regularizer=L1L2ProjectionRegularizationParametrizedSymmetric(
-                    self.reg_param,
-                    self.encoder.get_layer(f"encoder_{self.num_levels - j - 1}").kernel,
-                ),
-                initializer=self.initializer_decoder,
-                dtype=self.dtype,
-            )(x)
-            decoder_layers.append(x)
-
-        return keras.Model(inputs, decoder_layers, name="decoder")
-
-    def build_range_space(self, matrix):
-        """
-        Build the range space of the model.
-
-        Args:
-            matrix (tf.Tensor): Matrix tensor.
-
-        Returns:
-            keras.Model: The range space model.
-        """
-        inputs = keras.Input(shape=self._input_shape)
-        x = inputs
-
-        range_space_layers = []
-
-        x = LinearDense(
-            self.inner_shape,
-            name="range_space_0",
-            initializer=MatrixInitializer(matrix),
-            dtype=self.dtype,
-            trainable=False,
-        )(x)
-        range_space_layers.append(x)
-
-        return keras.Model(inputs, range_space_layers, name="range_space")
-
-    def call(self, inputs, training=None):
-        """
-        Call the model.
-
-        Args:
-            inputs (tf.Tensor): Input tensor.
-            training (bool): Whether the model is training.
-            mask (tf.Tensor): Mask tensor.
-
-        Returns:
-            tf.Tensor: Output tensor.
-        """
-        x = self.encoder(inputs, training=training)
-        x = self.decoder(x, training=training)
-        x = self.range_space(x, training=False)
-        return x
-
-
-# see https://blog.keras.io/building-autoencoders-in-keras.html
-ENCODING_DIM = 32
-INPUT_SHAPE = (784,)
-NUM_LEVELS = 1
-COMPRESSION_FACTOR = 24.5
-REG_PARAM = 1.0e-2
-DTYPE = "float32"
-
-
-def test_pseudo_vcycle():
-    """
-    Test the PseudoVcycle model. Use the MNIST dataset.
-    """
-    model = PseudoVcycle(
-        input_shape=INPUT_SHAPE,
-        num_levels=NUM_LEVELS,
-        compression_factor=COMPRESSION_FACTOR,
-        reg_param=REG_PARAM,
-        dtype=DTYPE,
-    )
-    model.compile(optimizer="adam", loss="mean_absolute_error")
-
-    (x_train, _), (x_test, _) = mnist.load_data()
-
-    x_train = x_train.astype("float32") / 255.0
-    x_test = x_test.astype("float32") / 255.0
-
-    x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
-    x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
-
-    model.fit(
-        x_train,
-        x_train,
-        epochs=50,
-        batch_size=256,
-        shuffle=True,
-        validation_data=(x_test, x_test),
-    )
-
-    encoded_imgs = model.encoder.predict(x_test)
-    decoded_imgs = model.decoder.predict(encoded_imgs)
-
-    N = 10
-    plt.figure(figsize=(20, 4))
-    for i in range(N):
-        # display original
-        ax = plt.subplot(2, N, i + 1)
-        plt.imshow(x_test[i].reshape(28, 28))
-        plt.gray()
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-
-        # display reconstruction
-        ax = plt.subplot(2, N, i + 1 + N)
-        plt.imshow(decoded_imgs[i].reshape(28, 28))
-        plt.gray()
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-    plt.show()
-
-
-def test_pseudo_mg():
-    """
-    Test the PseudoMG model. Use the MNIST dataset.
-    """
-    model = PseudoMG(
-        input_shape=INPUT_SHAPE,
-        matrix=ops.eye(784),
-        num_levels=NUM_LEVELS,
-        compression_factor=COMPRESSION_FACTOR,
-        reg_param=REG_PARAM,
-        dtype=DTYPE,
-    )
-    model.compile(optimizer="adam", loss="mean_absolute_error")
-
-    (x_train, _), (x_test, _) = mnist.load_data()
-
-    x_train = x_train.astype("float32") / 255.0
-    x_test = x_test.astype("float32") / 255.0
-
-    x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
-    x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
-
-    model.fit(
-        x_train,
-        x_train,
-        epochs=50,
-        batch_size=256,
-        shuffle=True,
-        validation_data=(x_test, x_test),
-    )
-
-    encoded_imgs = model.encoder.predict(x_test)
-    decoded_imgs = model.decoder.predict(encoded_imgs)
-
-    N = 10
-    plt.figure(figsize=(20, 4))
-    for i in range(N):
-        # display original
-        ax = plt.subplot(2, N, i + 1)
-        plt.imshow(x_test[i].reshape(28, 28))
-        plt.gray()
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-
-        # display reconstruction
-        ax = plt.subplot(2, N, i + 1 + N)
-        plt.imshow(decoded_imgs[i].reshape(28, 28))
-        plt.gray()
-        ax.get_xaxis().set_visible(False)
-        ax.get_yaxis().set_visible(False)
-    plt.show()
-
+def test_dense_mg():
+    raise NotImplementedError
 
 if __name__ == "__main__":
-    test_pseudo_vcycle()
-    test_pseudo_mg()
+    check_directories()
+    test_dense_vcycle()
+    # test_dense_mg()
