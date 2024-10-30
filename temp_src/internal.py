@@ -38,9 +38,7 @@ def get_device():
 
 # PyAMG-based aggregation
 # Prefix: pyamg_
-def pyamg_get_sparcity_pattern_projector(
-    matrix: sp.csr_matrix, agg_type: str
-) -> sp.csr_matrix:
+def pyamg_get_sparcity_pattern_projector(matrix: sp.csr_matrix, agg_type: str):
     """
     Get the sparcity pattern projector using PyAMG.
 
@@ -49,11 +47,10 @@ def pyamg_get_sparcity_pattern_projector(
     - str_agg_type (str): Aggregation type.
 
     Outputs:
-    - projector (scipy.sparse.csr_matrix): Sparse matrix that maps fine
-    dofs to coarse dofs.
+        - projector (tuple): Projector and seeds.
     """
     try:
-        agg_type = AggregationType[agg_type]
+        agg_type = AggregationType[agg_type.upper()]
     except KeyError:
         raise ValueError(f"Invalid aggregation type: {agg_type}")
     if agg_type == AggregationType.STANDARD:
@@ -184,7 +181,7 @@ def test_pyamg_agg():
     """
     dense_mat = np.array([[2, -1, 0, 0], [-1, 2, -1, 0], [0, -1, 2, -1], [0, 0, -1, 2]])
     sparse_mat = sp.csr_matrix(dense_mat)
-    projector = pyamg_get_sparcity_pattern_projector(sparse_mat, "STANDARD")
+    projector = pyamg_get_sparcity_pattern_projector(sparse_mat, "standard")
     print(f"Projector:\n {projector[0].todense()}")
 
 

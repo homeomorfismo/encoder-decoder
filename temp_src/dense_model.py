@@ -44,12 +44,7 @@ class DenseVcycle(nn.Module):
         self._name = "DenseVcycle"
         self._input_shape = input_shape
         self._coarse_shape = coarse_shape
-        for param, value in kwargs.items():
-            setattr(self, f"_{param}", value)
-
-        self._dict = {}
-        for param, value in kwargs.items():
-            self._dict[param] = value
+        self._dict = kwargs
 
         self.encoder = nn.Linear(
             in_features=self._input_shape[-1],
@@ -103,12 +98,7 @@ class DenseMG(nn.Module):
         self._name = "DenseMG"
         self._input_shape = input_shape
         self._coarse_shape = coarse_shape
-        for param, value in kwargs.items():
-            setattr(self, f"_{param}", value)
-
-        self._dict = {}
-        for param, value in kwargs.items():
-            self._dict[param] = value
+        self._dict = kwargs
 
         self.encoder = nn.Linear(
             in_features=self._input_shape[-1],
