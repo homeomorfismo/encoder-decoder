@@ -50,18 +50,18 @@ def pyamg_get_sparcity_pattern_projector(matrix: sp.csr_matrix, agg_type: str):
         - projector (tuple): Projector and seeds.
     """
     try:
-        agg_type = AggregationType[agg_type.upper()]
+        agg_type_ = AggregationType[agg_type.upper()]
     except KeyError:
         raise ValueError(f"Invalid aggregation type: {agg_type}")
-    if agg_type == AggregationType.STANDARD:
+    if agg_type_ == AggregationType.STANDARD:
         aggregation = agg.standard_aggregation
-    elif agg_type == AggregationType.NAIVE:
+    elif agg_type_ == AggregationType.NAIVE:
         aggregation = agg.naive_aggregation
-    elif agg_type == AggregationType.PAIRWISE:
+    elif agg_type_ == AggregationType.PAIRWISE:
         aggregation = agg.pairwise_aggregation
-    elif agg_type == AggregationType.LLOYD:
+    elif agg_type_ == AggregationType.LLOYD:
         aggregation = agg.lloyd_aggregation
-    elif agg_type == AggregationType.BALANCED_LLOYD:
+    elif agg_type_ == AggregationType.BALANCED_LLOYD:
         aggregation = agg.balanced_lloyd_aggregation
     else:
         raise ValueError(f"Invalid aggregation type: {agg_type}")

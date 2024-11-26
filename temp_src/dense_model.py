@@ -15,7 +15,6 @@ written by Gabriel Pinochet-Soto.
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.functional as functional
 import torchvision
 
 from internal import get_device
@@ -57,6 +56,10 @@ class DenseVcycle(nn.Module):
             out_features=self._input_shape[-1],
             bias=False,
         )
+
+        if "device" in self._dict:
+            self.encoder.to(self._dict["device"])
+            self.decoder.to(self._dict["device"])
 
     def forward(self, x):
         """
@@ -119,6 +122,11 @@ class DenseMG(nn.Module):
         )
         self.range_space.weight = nn.Parameter(matrix, requires_grad=False)
 
+        if "device" in self._dict:
+            self.encoder.to(self._dict["device"])
+            self.decoder.to(self._dict["device"])
+            self.range_space.to(self._dict["device"])
+
     def forward(self, x):
         """
         Forward pass of the model.
@@ -156,7 +164,6 @@ def test_dense_vcycle():
     Test the DenseVcycle model.
     Encoding-decoding MNIST data.
     """
-    import torchvision
     import matplotlib.pyplot as plt
     from torchvision.utils import save_image
 
