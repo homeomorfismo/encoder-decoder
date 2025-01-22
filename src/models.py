@@ -17,63 +17,106 @@ __NUM_BATCHES__ = 50
 __LEARNING_RATE__ = 0.05
 
 
-class DenseEncoderDecoder:
+@jit
+def LinearLayer(
+    x: jnp.ndarray,
+    weights: jnp.ndarray,
+    bias: jnp.ndarray,
+) -> jnp.ndarray:
     """
-    Encoder-Decoder architecture using dense layers.
+    Simple linear layer x -> Wx + b.
     """
-
-    def __init__(self, fine_dim: int, coarse_dim: int):
-        self.fine_dim = fine_dim
-        self.coarse_dim = coarse_dim
-        self.key = random.PRNGKey(0)
-        self.encoder_weights = random.normal(self.key, (fine_dim, coarse_dim))
-        self.decoder_weights = random.normal(self.key, (coarse_dim, fine_dim))
-
-    def encode(self, x: jnp.ndarray) -> jnp.ndarray:
-        return jnp.dot(x, self.encoder_weights)
-
-    def decode(self, x: jnp.ndarray) -> jnp.ndarray:
-        return jnp.dot(x, self.decoder_weights)
-
-    def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-        return self.decode(self.encode(x))
+    return jnp.dot(x, weights) + bias
 
 
-def loss(x, y, encoder_weights, decoder_weights, coarse_dim=5, alpha=1.0e-3):
+@jit
+def LinearEncoderDecoder(
+    x: jnp.ndarray,
+    encoder_weights: jnp.ndarray,
+    decoder_weights: jnp.ndarray,
+) -> jnp.ndarray:
+    """
+    Encoder-Decoder architecture using linear layers.
+    Null biases are used.
+    """
+    coarse_x = LinearLayer(
+        x, encoder_weights, jnp.zeros_like(encoder_weights.shape[1])
+    )
+    fine_x = LinearLayer(
+        coarse_x, decoder_weights, jnp.zeros_like(decoder_weights.shape[1])
+    )
+    return fine_x
+
+
+@jit
+def loss(
+    x: jnp.ndarray,
+    y: jnp.ndarray,
+    encoder_weights: jnp.ndarray,
+    decoder_weights: jnp.ndarray,
+    reg: jnp.ndarray,
+):
     """
     Loss function for encoder-decoder architecture.
     """
-    reconstruction_loss = jnp.mean((x - y) ** 2)
-    regularization_loss = jnp.linalg.norm(encoder_weights)
-    regularization_loss += jnp.linalg.norm(decoder_weights)
-    identity_loss = jnp.linalg.norm(
-        jnp.eye(coarse_dim) - jnp.dot(decoder_weights, encoder_weights)
+    reconstr_loss = jnp.mean((x - y) ** 2)
+    reg_loss = jnp.linalg.norm(encoder_weights)
+    reg_loss += jnp.linalg.norm(decoder_weights)
+    reg_loss += jnp.linalg.norm(
+        jnp.eye(__COARSE_DIM__) - jnp.dot(decoder_weights, encoder_weights)
     )
-    return reconstruction_loss + alpha * (regularization_loss + identity_loss)
+    return reconstr_loss + reg * reg_loss
 
 
-def update(x, encoder_decoder, lr=0.01):
-    loss_value, grads = jax.value_and_grad(loss, argnums=(2, 3))(
+@jit
+def update(
+    x: jnp.ndarray,
+    encoder_weights: jnp.ndarray,
+    decoder_weights: jnp.ndarray,
+    lr: float = 0.01,
+    reg: float = 0.01,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    """
+    Update function for training the encoder-decoder architecture.
+    """
+    grad_ew, grad_dw = jax.grad(loss, argnums=(2, 3))(
         x,
-        encoder_decoder(x),
-        encoder_decoder.encoder_weights,
-        encoder_decoder.decoder_weights,
+        LinearEncoderDecoder(x, encoder_weights, decoder_weights),
+        encoder_weights,
+        decoder_weights,
+        jnp.array(reg),
     )
-    encoder_decoder.encoder_weights -= lr * grads[0]
-    encoder_decoder.decoder_weights -= lr * grads[1]
-    return loss_value
+    encoder_weights -= lr * grad_ew
+    decoder_weights -= lr * grad_dw
+    return encoder_weights, decoder_weights
 
 
 if __name__ == "__main__":
-    encoder_decoder = DenseEncoderDecoder(__FINE_DIM__, __COARSE_DIM__)
+    # Initialize weights
     key = random.PRNGKey(0)
-    x = random.normal(key, (__BATCH_SIZE__, __FINE_DIM__))
+    encoder_weights = random.normal(key, (__FINE_DIM__, __COARSE_DIM__))
+    decoder_weights = random.normal(key, (__COARSE_DIM__, __FINE_DIM__))
+
+    # Training loop
     for epoch in range(__NUM_EPOCHS__):
         for _ in range(__NUM_BATCHES__):
-            loss_value = update(x, encoder_decoder, __LEARNING_RATE__)
+            x = random.normal(key, (__BATCH_SIZE__, __FINE_DIM__))
+            encoder_weights, decoder_weights = update(
+                x, encoder_weights, decoder_weights, __LEARNING_RATE__
+            )
+        print(f"Epoch {epoch} completed")
         if epoch % 10 == 0:
-            print(f"\nEpoch: {epoch}")
-            print(f"\n\tLoss: {loss_value}")
-            print(f"\n\tEncoder weights: {encoder_decoder.encoder_weights}")
-            print(f"\n\tDecoder weights: {encoder_decoder.decoder_weights}")
-    print("\nTraining complete!\n")
+            loss_val = loss(
+                x,
+                LinearEncoderDecoder(x, encoder_weights, decoder_weights),
+                encoder_weights,
+                decoder_weights,
+                0.01,
+            )
+            print(
+                f"\n\tEncoder weights:\n{encoder_weights}"
+                f"\n\tDecoder weights:\n{decoder_weights}"
+                f"\n\tLoss: {loss_val}\n"
+            )
+
+    print("Training completed")
