@@ -171,7 +171,7 @@ def loss_mg_l0(
     return reconstr_loss + reg * reg_loss
 
 
-if __name__ == "__main__":
+def __test_loss_functions():
     # Test loss functions
     import numpy as np
 
@@ -201,3 +201,52 @@ if __name__ == "__main__":
 
     for name, value in zip(names, values):
         print(f"{name}:\t{value}\n")
+
+
+def __test_grads_loss_functions():
+    # Test loss functions
+    import numpy as np
+
+    x = np.random.rand(10, 10)
+    y = np.random.rand(10, 10)
+    encoder_weights = np.random.rand(10, 10)
+    decoder_weights = np.random.rand(10, 10)
+    reg = 0.1
+
+    names = [
+        "Eucledian",
+        "MG Eucledian",
+        "L1",
+        "MG L1",
+        "L0",
+        "MG L0",
+    ]
+    values = []
+    values.append(
+        jax.grad(loss_eucledian)(x, y, encoder_weights, decoder_weights, reg)
+    )
+    values.append(
+        jax.grad(loss_mg_eucledian)(
+            x, y, encoder_weights, decoder_weights, reg
+        )
+    )
+    values.append(
+        jax.grad(loss_l1)(x, y, encoder_weights, decoder_weights, reg)
+    )
+    values.append(
+        jax.grad(loss_mg_l1)(x, y, encoder_weights, decoder_weights, reg)
+    )
+    values.append(
+        jax.grad(loss_l0)(x, y, encoder_weights, decoder_weights, reg)
+    )
+    values.append(
+        jax.grad(loss_mg_l0)(x, y, encoder_weights, decoder_weights, reg)
+    )
+
+    for name, value in zip(names, values):
+        print(f"{name}:\t{value}\n")
+
+
+if __name__ == "__main__":
+    __test_loss_functions()
+    __test_grads_loss_functions()
