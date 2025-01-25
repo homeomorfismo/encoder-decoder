@@ -3,7 +3,6 @@ Implementation of basic linear models for encoder-decoder architectures
 using JAX.
 """
 
-from functools import partial
 import jax
 import jax.numpy as jnp
 from jax import random, jit
