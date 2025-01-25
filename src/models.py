@@ -17,6 +17,9 @@ __NUM_BATCHES__ = 50
 __LEARNING_RATE__ = 0.05
 
 
+######################
+# Linear models
+######################
 @jit
 def LinearLayer(
     x: jnp.ndarray,
@@ -49,13 +52,39 @@ def LinearEncoderDecoder(
 
 
 @jit
-def loss(
+def MGLinearEncoderDecoder(
+    x: jnp.ndarray,
+    encoder_weights: jnp.ndarray,
+    decoder_weights: jnp.ndarray,
+    range_weights: jnp.ndarray,
+) -> jnp.ndarray:
+    """
+    MG Encoder-Decoder architecture using linear layers.
+    Null biases are used.
+    """
+    coarse_x = LinearLayer(
+        x, encoder_weights, jnp.zeros_like(encoder_weights.shape[1])
+    )
+    fine_x = LinearLayer(
+        coarse_x, decoder_weights, jnp.zeros_like(decoder_weights.shape[1])
+    )
+    range_x = LinearLayer(
+        fine_x, range_weights, jnp.zeros_like(range_weights.shape[1])
+    )
+    return range_x
+
+
+######################
+# Loss functions
+######################
+@jit
+def loss_encoder_decoder(
     x: jnp.ndarray,
     y: jnp.ndarray,
     encoder_weights: jnp.ndarray,
     decoder_weights: jnp.ndarray,
-    reg: jnp.ndarray,
-):
+    reg: float,
+) -> float:
     """
     Loss function for encoder-decoder architecture.
     """
@@ -63,7 +92,32 @@ def loss(
     reg_loss = jnp.linalg.norm(encoder_weights)
     reg_loss += jnp.linalg.norm(decoder_weights)
     reg_loss += jnp.linalg.norm(
-        jnp.eye(__COARSE_DIM__) - jnp.dot(decoder_weights, encoder_weights)
+        jnp.eye(decoder_weights.shape[0])
+        - jnp.dot(decoder_weights, encoder_weights)
+    )
+    return reconstr_loss + reg * reg_loss
+
+
+@jit
+def loss_mg_encoder_decoder(
+    x: jnp.ndarray,
+    y: jnp.ndarray,
+    encoder_weights: jnp.ndarray,
+    decoder_weights: jnp.ndarray,
+    # range_weights: jnp.ndarray,
+    reg: float,
+) -> float:
+    """
+    Loss function for MG encoder-decoder architecture.
+    """
+    reconstr_loss = jnp.mean(
+        jnp.dot(x - y, jnp.transpose(decoder_weights)) ** 2
+    )
+    reg_loss = jnp.linalg.norm(encoder_weights)
+    reg_loss += jnp.linalg.norm(decoder_weights)
+    reg_loss += jnp.linalg.norm(
+        jnp.eye(decoder_weights.shape[0])
+        - jnp.dot(decoder_weights, encoder_weights)
     )
     return reconstr_loss + reg * reg_loss
 
@@ -79,7 +133,7 @@ def update(
     """
     Update function for training the encoder-decoder architecture.
     """
-    grad_ew, grad_dw = jax.grad(loss, argnums=(2, 3))(
+    grad_ew, grad_dw = jax.grad(loss_encoder_decoder, argnums=(2, 3))(
         x,
         LinearEncoderDecoder(x, encoder_weights, decoder_weights),
         encoder_weights,
@@ -106,7 +160,7 @@ if __name__ == "__main__":
             )
         print(f"Epoch {epoch} completed")
         if epoch % 10 == 0:
-            loss_val = loss(
+            loss_val = loss_encoder_decoder(
                 x,
                 LinearEncoderDecoder(x, encoder_weights, decoder_weights),
                 encoder_weights,
