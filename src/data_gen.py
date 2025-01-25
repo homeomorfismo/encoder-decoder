@@ -10,7 +10,6 @@ import scipy.sparse as sp
 import ngsolve as ng
 
 # local imports
-import fes
 from solver import coordinate_descent
 from geo2d import make_unit_square
 
@@ -29,6 +28,12 @@ class DataGenerator(ABC):
         Initialize the data generator.
         """
         pass
+
+    def __str__(self):
+        """
+        String representation of the data generator.
+        """
+        return f"{self.__class__.__name__}()"
 
     @abstractmethod
     def make_data(self, x: jnp.ndarray) -> jnp.ndarray:
@@ -75,8 +80,36 @@ class DataGenerator(ABC):
         """
         pass
 
+    def assemble(self, *args) -> None:
+        """
+        Assemble the forms in the data generator.
 
-class HelmholtzDGen(DataGenerator):
+        Args:
+            args: list
+                List of forms to assemble.
+        """
+        for form in args:
+            with ng.TaskManager():
+                try:
+                    form.Assemble()
+                except Exception as e:
+                    print(
+                        f"\t->Unable to assemble {form}. Increasing heap size."
+                        f"\nError: {e}"
+                    )
+                    ng.SetHeapSize(int(1e9))
+                    form.Assemble()
+                finally:
+                    pass
+        print("\t->All forms assembled.")
+
+
+######################################################################
+class BasicConvDiffDataGen(DataGenerator):
+    """
+    Data generator for a basic convection-diffusion problem.
+    """
+
     def __init__(
         self,
         mesh: ng.Mesh,
@@ -86,28 +119,51 @@ class HelmholtzDGen(DataGenerator):
         is_complex: bool = True,
         is_dirichlet: bool = True,
     ):
+        """
+        Initialize the data generator.
+        INPUTS:
+            mesh: ng.Mesh
+                NGSolve mesh object.
+            tol: float
+                Tolerance for the iterative solver.
+            order: int
+                Order of the finite element space.
+            iterations: int
+                Number of iterations for the iterative solver.
+            is_complex: bool
+                Flag for complex data.
+            is_dirichlet: bool
+                Flag for Dirichlet boundary conditions.
+        """
+        super().__init__()
         matrix_coeff = ng.CF((1.0, 0.0, 0.0, 1.0), dims=(2, 2))
         vector_coeff = ng.CF((0.0, 0.0))
         scalar_coeff = ng.CF(1.0)
-        a, _, space = fes.convection_diffusion(
-            mesh,
-            matrix_coeff,
-            vector_coeff,
-            scalar_coeff,
-            order=order,
-            is_complex=is_complex,
-            is_dirichlet=is_dirichlet,
-        )
-        fes.assemble(a)
+        if is_dirichlet:
+            fes = ng.H1(
+                mesh,
+                order=order,
+                complex=is_complex,
+                dirichlet="boundary",
+                autoupdate=True,
+            )
+        else:
+            fes = ng.H1(mesh, order=order, complex=is_complex, autoupdate=True)
+        u, v = fes.TnT()
+        a = ng.BilinearForm(fes)
+        a += matrix_coeff * ng.grad(u) * ng.grad(v) * ng.dx
+        a += vector_coeff * ng.grad(u) * v * ng.dx
+        a += scalar_coeff * u * v * ng.dx
+        self.assemble(a)
 
-        self.space = space
+        self.space = fes
         a_row, a_col, a_val = a.mat.COO()
         self.operator = jnp.array(
             sp.csr_matrix(
                 (a_val, (a_row, a_col)), shape=(a.mat.height, a.mat.width)
             ).todense()
         )
-        self.free_dofs = jnp.array(list(space.FreeDofs()))
+        self.free_dofs = jnp.array(list(fes.FreeDofs()))
         self.rest_operator = (
             self.operator.at[~self.free_dofs]
             .set(0)
@@ -121,6 +177,20 @@ class HelmholtzDGen(DataGenerator):
         self.tol = tol
         self.iterations = iterations
         self.is_complex = is_complex
+
+        print(f"Data generator initialized:\n{self}")
+
+    def __str__(self):
+        desc = (
+            f"Space: {self.space}\n"
+            f"Operator shape: {self.operator.shape}\n"
+            # f"Free dofs: {self.free_dofs}\n"
+            f"Rest operator shape: {self.rest_operator.shape}\n"
+            f"Tolerance: {self.tol}\n"
+            f"Iterations: {self.iterations}\n"
+            f"Complex: {self.is_complex}"
+        )
+        return f"{super().__str__()}\n{desc}"
 
     def make_data(self, x: jnp.ndarray) -> jnp.ndarray:
         z = x.copy()
@@ -169,6 +239,6 @@ class HelmholtzDGen(DataGenerator):
 
 if __name__ == "__main__":
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=__MAXH__))
-    dgen = HelmholtzDGen(mesh)
+    dgen = BasicConvDiffDataGen(mesh)
     print(dgen.generate_samples(10))
     print(dgen.get_gf())
