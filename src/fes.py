@@ -29,7 +29,8 @@ def assemble(*args) -> None:
                 form.Assemble()
             except Exception as e:
                 print(
-                    f"Unable to assemble {form}. Increasing heap size." f"\nError: {e}"
+                    f"Unable to assemble {form}. Increasing heap size."
+                    f"\nError: {e}"
                 )
                 SetHeapSize(int(1e9))
                 form.Assemble()
@@ -54,7 +55,11 @@ def convection_diffusion(
     assert scalar_coeff is not None, "Scalar coefficient must be provided"
     if is_dirichlet:
         fes = H1(
-            mesh, order=order, complex=is_complex, dirichlet="boundary", autoupdate=True
+            mesh,
+            order=order,
+            complex=is_complex,
+            dirichlet="boundary",
+            autoupdate=True,
         )
     else:
         fes = H1(mesh, order=order, complex=is_complex, autoupdate=True)

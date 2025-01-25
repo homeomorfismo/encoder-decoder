@@ -84,7 +84,9 @@ class PseudoVcycle(keras.Model):
                 self.inner_shape,
                 # self.inner_shapes[j],
                 name=f"encoder_{j}",
-                kernel_regularizer=L1L2ProjectionRegularization(self.reg_param),
+                kernel_regularizer=L1L2ProjectionRegularization(
+                    self.reg_param
+                ),
                 initializer=self.initializer_encoder,
                 dtype=self.dtype,
             )(x)
@@ -112,7 +114,9 @@ class PseudoVcycle(keras.Model):
                 name=f"decoder_{j}",
                 kernel_regularizer=L1L2ProjectionRegularizationParametrizedSymmetric(
                     self.reg_param,
-                    self.encoder.get_layer(f"encoder_{self.num_levels - j - 1}").kernel,
+                    self.encoder.get_layer(
+                        f"encoder_{self.num_levels - j - 1}"
+                    ).kernel,
                 ),
                 initializer=self.initializer_decoder,
                 dtype=self.dtype,
@@ -203,7 +207,9 @@ class PseudoMG(keras.Model):
             x = LinearDense(
                 self.inner_shape,
                 name=f"encoder_{j}",
-                kernel_regularizer=L1L2ProjectionRegularization(self.reg_param),
+                kernel_regularizer=L1L2ProjectionRegularization(
+                    self.reg_param
+                ),
                 initializer=self.initializer_encoder,
                 dtype=self.dtype,
             )(x)
@@ -229,7 +235,9 @@ class PseudoMG(keras.Model):
                 name=f"decoder_{j}",
                 kernel_regularizer=L1L2ProjectionRegularizationParametrizedSymmetric(
                     self.reg_param,
-                    self.encoder.get_layer(f"encoder_{self.num_levels - j - 1}").kernel,
+                    self.encoder.get_layer(
+                        f"encoder_{self.num_levels - j - 1}"
+                    ).kernel,
                 ),
                 initializer=self.initializer_decoder,
                 dtype=self.dtype,

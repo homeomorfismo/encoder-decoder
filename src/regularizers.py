@@ -49,10 +49,15 @@ class L1L2ProjectionRegularizationParametrized(regularizers.Regularizer):
         )
 
     def get_config(self):
-        return {"strength": self.strength, "weight_matrix": self.weight_matrix}
+        return {
+            "strength": self.strength,
+            "weight_matrix": self.weight_matrix,
+        }
 
 
-class L1L2ProjectionRegularizationParametrizedSymmetric(regularizers.Regularizer):
+class L1L2ProjectionRegularizationParametrizedSymmetric(
+    regularizers.Regularizer
+):
     """
     L1 regularization plus L2 projection constraint.
     Given an input matrix W: N_coarse x N, and a matrix V: N x N_coarse,
@@ -75,13 +80,22 @@ class L1L2ProjectionRegularizationParametrizedSymmetric(regularizers.Regularizer
         return (
             self.strength * ops.norm(W, ord=1)
             + self.strength
-            * ops.norm(ops.matmul(W, ops.transpose(W)) - ops.eye(W.shape[0]), ord=2)
+            * ops.norm(
+                ops.matmul(W, ops.transpose(W)) - ops.eye(W.shape[0]),
+                ord=2,
+            )
             + self.strength
-            * ops.norm(ops.matmul(W, self.weight_matrix) - ops.eye(W.shape[0]), ord=2)
+            * ops.norm(
+                ops.matmul(W, self.weight_matrix) - ops.eye(W.shape[0]),
+                ord=2,
+            )
         )
 
     def get_config(self):
-        return {"strength": self.strength, "weight_matrix": self.weight_matrix}
+        return {
+            "strength": self.strength,
+            "weight_matrix": self.weight_matrix,
+        }
 
 
 # WIP

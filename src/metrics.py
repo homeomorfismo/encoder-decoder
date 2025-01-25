@@ -13,7 +13,9 @@ class DecodingMetric(Metric):
     Metric that computes the transpose of the decoding matrix.
     """
 
-    def __init__(self, name="decoding_transpose", decoding_matrix=None, **kwargs):
+    def __init__(
+        self, name="decoding_transpose", decoding_matrix=None, **kwargs
+    ):
         super().__init__(name=name, **kwargs)
         self.decoding_matrix = decoding_matrix
         self.mae = self.add_variable(
@@ -71,7 +73,8 @@ class L2ErrorMetric(Metric):
         self.grid_function.vec.data.FV().NumPy()[:] = diff.numpy()
         l2_norm = np.sqrt(
             ng.Integrate(
-                ng.Norm(self.grid_function) ** 2 * ng.dx, self.grid_function.space.mesh
+                ng.Norm(self.grid_function) ** 2 * ng.dx,
+                self.grid_function.space.mesh,
             )
         )
 

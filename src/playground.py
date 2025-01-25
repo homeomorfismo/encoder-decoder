@@ -27,7 +27,9 @@ def test_vcycle_complex():
     tf.compat.v1.enable_eager_execution()
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
 
-    helmholtz_gen = HelmholtzDGen(mesh, tol=1e-1, is_complex=True, is_dirichlet=True)
+    helmholtz_gen = HelmholtzDGen(
+        mesh, tol=1e-1, is_complex=True, is_dirichlet=True
+    )
 
     x_data_smooth_real = helmholtz_gen.from_smooth(1000, field="real")
     x_data_smooth_imag = helmholtz_gen.from_smooth(1000, field="imag")
@@ -37,10 +39,12 @@ def test_vcycle_complex():
     x_data_random_complex = helmholtz_gen.from_random(1000, field="complex")
 
     x_data_smooth = np.concatenate(
-        (x_data_smooth_real, x_data_smooth_imag, x_data_smooth_complex), axis=0
+        (x_data_smooth_real, x_data_smooth_imag, x_data_smooth_complex),
+        axis=0,
     )
     x_data_random = np.concatenate(
-        (x_data_random_real, x_data_random_imag, x_data_random_complex), axis=0
+        (x_data_random_real, x_data_random_imag, x_data_random_complex),
+        axis=0,
     )
 
     x_data = np.concatenate((x_data_smooth, x_data_random), axis=0)
@@ -120,7 +124,11 @@ def test_vcycle_real():
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
 
     helmholtz_gen = HelmholtzDGen(
-        mesh, tol=1e-1, iterations=1000, is_complex=False, is_dirichlet=True
+        mesh,
+        tol=1e-1,
+        iterations=1000,
+        is_complex=False,
+        is_dirichlet=True,
     )
 
     x_data_smooth = helmholtz_gen.from_smooth(1000, field="real")
@@ -199,7 +207,9 @@ def test_mg_real():
     tf.compat.v1.enable_eager_execution()
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
 
-    helmholtz_gen = HelmholtzDGen(mesh, tol=1e-1, is_complex=False, is_dirichlet=True)
+    helmholtz_gen = HelmholtzDGen(
+        mesh, tol=1e-1, is_complex=False, is_dirichlet=True
+    )
 
     x_data_smooth = helmholtz_gen.from_smooth(1000, field="real")
     x_data_random = helmholtz_gen.from_random(1000, field="real")
@@ -221,7 +231,8 @@ def test_mg_real():
     mg.compile(
         optimizer="adam",
         loss=partial(
-            projected_l2_loss, ops.transpose(mg.decoder.layers[-1].weights[0])
+            projected_l2_loss,
+            ops.transpose(mg.decoder.layers[-1].weights[0]),
         ),
     )
 
@@ -283,7 +294,11 @@ def test_vcycle_solver():
     # Set up system
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.1))
     helmholtz_gen = HelmholtzDGen(
-        mesh, tol=1e-1, iterations=1000, is_complex=False, is_dirichlet=True
+        mesh,
+        tol=1e-1,
+        iterations=1000,
+        is_complex=False,
+        is_dirichlet=True,
     )
 
     x_data_smooth = helmholtz_gen.from_smooth(500, field="real")
@@ -325,14 +340,17 @@ def test_vcycle_solver():
     a_ng = helmholtz_gen.ng_operator
 
     # decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
-    encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
+    encoder_kernel = (
+        vcycle.encoder.layers[-1].weights[0].numpy()
+    )  # (large, small)
 
     TOL = 0.0
     # a_coarse_decoder = decoder_kernel @ a_fine @ decoder_kernel.T + TOL * np.eye(
     #     vcycle.inner_shape
     # )
-    a_coarse_encoder = encoder_kernel.T @ a_fine @ encoder_kernel + TOL * np.eye(
-        vcycle.inner_shape
+    a_coarse_encoder = (
+        encoder_kernel.T @ a_fine @ encoder_kernel
+        + TOL * np.eye(vcycle.inner_shape)
     )
 
     # Get right-hand side
@@ -344,7 +362,9 @@ def test_vcycle_solver():
     # Make solvers
     # NGsolve solver
     sol_ng = helmholtz_gen.get_gf(name="Solution NGSolve")
-    sol_ng.vec.data = a_ng.Inverse(freedofs=helmholtz_gen.space.FreeDofs()) * rhs.vec
+    sol_ng.vec.data = (
+        a_ng.Inverse(freedofs=helmholtz_gen.space.FreeDofs()) * rhs.vec
+    )
     ng.Draw(sol_ng, mesh, "Solution NGSolve")
 
     # Symmetric Gauss-Seidel solver
@@ -440,7 +460,9 @@ def test_solver():
 
     # Set up system
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.05))
-    helmholtz_gen = HelmholtzDGen(mesh, tol=1e-1, is_complex=False, is_dirichlet=True)
+    helmholtz_gen = HelmholtzDGen(
+        mesh, tol=1e-1, is_complex=False, is_dirichlet=True
+    )
 
     # Get operators
     free_dofs = helmholtz_gen.free_dofs
@@ -457,7 +479,9 @@ def test_solver():
     # Make solvers
     # NGsolve solver
     sol_ng = helmholtz_gen.get_gf(name="Solution NGSolve")
-    sol_ng.vec.data = a_ng.Inverse(freedofs=helmholtz_gen.space.FreeDofs()) * rhs.vec
+    sol_ng.vec.data = (
+        a_ng.Inverse(freedofs=helmholtz_gen.space.FreeDofs()) * rhs.vec
+    )
     ng.Draw(sol_ng, mesh, "Solution NGSolve")
 
     # Symmetric Gauss-Seidel solver
@@ -474,7 +498,9 @@ def test_solver():
     sol_sgs.vec.FV().NumPy()[:] = x0
     ng.Draw(sol_sgs, mesh, "Solution SGS")
 
-    l2_error = np.sqrt(ng.Integrate(ng.Norm(sol_ng - sol_sgs) ** 2 * ng.dx, mesh))
+    l2_error = np.sqrt(
+        ng.Integrate(ng.Norm(sol_ng - sol_sgs) ** 2 * ng.dx, mesh)
+    )
     assert l2_error < 1e-10, f"L2 error: {l2_error}"
 
 
@@ -489,7 +515,11 @@ def test_truncate_weights():
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.1))
 
     helmholtz_gen = HelmholtzDGen(
-        mesh, tol=1e-1, iterations=1000, is_complex=False, is_dirichlet=True
+        mesh,
+        tol=1e-1,
+        iterations=1000,
+        is_complex=False,
+        is_dirichlet=True,
     )
 
     x_data_smooth = helmholtz_gen.from_smooth(500, field="real")
@@ -551,8 +581,12 @@ def test_truncate_weights():
 
     # Truncate weights
     print("Truncating weights...")
-    decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
-    encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
+    decoder_kernel = (
+        vcycle.decoder.layers[-1].weights[0].numpy()
+    )  # (small, large)
+    encoder_kernel = (
+        vcycle.encoder.layers[-1].weights[0].numpy()
+    )  # (large, small)
 
     tol = 1e-2
     # TODO Get complexity of the operators. Cf. class notes
@@ -566,26 +600,38 @@ def test_truncate_weights():
     gf_truncated = helmholtz_gen.get_gf(name="truncated(cos(pi*x)*cos(pi*y))")
     x_data_truncated = np.copy(gf.vec.FV().NumPy())
     x_data_truncated = tf.convert_to_tensor(x_data_truncated, dtype=tf.float32)
-    x_data_truncated = tf.reshape(x_data_truncated, (1, *x_data_truncated.shape))
+    x_data_truncated = tf.reshape(
+        x_data_truncated, (1, *x_data_truncated.shape)
+    )
 
     x_pred_truncated = vcycle.predict(x_data_truncated)
     gf_truncated.vec.FV().NumPy()[:] = x_pred_truncated[0]
     ng.Draw(gf_truncated, mesh, "truncated(cos(pi*x)*cos(pi*y))")
 
     # Check sparsity
-    fig = px.imshow(np.abs(decoder_kernel), labels=dict(color="Decoder Kernel"))
+    fig = px.imshow(
+        np.abs(decoder_kernel), labels=dict(color="Decoder Kernel")
+    )
     fig.show()
 
-    fig = px.imshow(np.abs(encoder_kernel), labels=dict(color="Encoder Kernel"))
+    fig = px.imshow(
+        np.abs(encoder_kernel), labels=dict(color="Encoder Kernel")
+    )
     fig.show()
 
     # Attempt 3: Set transpose of truncated encoder kernel as decoder kernel
     vcycle.decoder.layers[-1].set_weights([encoder_kernel.T])
 
-    gf_transposed = helmholtz_gen.get_gf(name="transposed(cos(pi*x)*cos(pi*y))")
+    gf_transposed = helmholtz_gen.get_gf(
+        name="transposed(cos(pi*x)*cos(pi*y))"
+    )
     x_data_transposed = np.copy(gf.vec.FV().NumPy())
-    x_data_transposed = tf.convert_to_tensor(x_data_transposed, dtype=tf.float32)
-    x_data_transposed = tf.reshape(x_data_transposed, (1, *x_data_transposed.shape))
+    x_data_transposed = tf.convert_to_tensor(
+        x_data_transposed, dtype=tf.float32
+    )
+    x_data_transposed = tf.reshape(
+        x_data_transposed, (1, *x_data_transposed.shape)
+    )
 
     x_pred_transposed = vcycle.predict(x_data_transposed)
     gf_transposed.vec.FV().NumPy()[:] = x_pred_transposed[0]
@@ -603,7 +649,11 @@ def test_check_sparsity_coarse():
     # Set up system
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=0.1))
     helmholtz_gen = HelmholtzDGen(
-        mesh, tol=1e-1, iterations=1000, is_complex=False, is_dirichlet=True
+        mesh,
+        tol=1e-1,
+        iterations=1000,
+        is_complex=False,
+        is_dirichlet=True,
     )
 
     x_data_smooth = helmholtz_gen.from_smooth(500, field="real")
@@ -644,8 +694,12 @@ def test_check_sparsity_coarse():
     a = helmholtz_gen.operator
     # a_ng = helmholtz_gen.ng_operator
 
-    decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
-    encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
+    decoder_kernel = (
+        vcycle.decoder.layers[-1].weights[0].numpy()
+    )  # (small, large)
+    encoder_kernel = (
+        vcycle.encoder.layers[-1].weights[0].numpy()
+    )  # (large, small)
 
     TOL = 0.0
     a_coarse_decoder = decoder_kernel @ a @ decoder_kernel.T + TOL * np.eye(
@@ -655,11 +709,13 @@ def test_check_sparsity_coarse():
         vcycle.inner_shape
     )
 
-    a_rest_coarse_decoder = decoder_kernel @ a_fine @ decoder_kernel.T + TOL * np.eye(
-        vcycle.inner_shape
+    a_rest_coarse_decoder = (
+        decoder_kernel @ a_fine @ decoder_kernel.T
+        + TOL * np.eye(vcycle.inner_shape)
     )
-    a_rest_coarse_encoder = encoder_kernel.T @ a_fine @ encoder_kernel + TOL * np.eye(
-        vcycle.inner_shape
+    a_rest_coarse_encoder = (
+        encoder_kernel.T @ a_fine @ encoder_kernel
+        + TOL * np.eye(vcycle.inner_shape)
     )
 
     a_coarse_decoder = np.abs(a_coarse_decoder)
@@ -667,19 +723,25 @@ def test_check_sparsity_coarse():
     a_rest_coarse_decoder = np.abs(a_rest_coarse_decoder)
     a_rest_coarse_encoder = np.abs(a_rest_coarse_encoder)
 
-    fig = px.imshow(a_coarse_decoder, labels=dict(color="Coarse Decoder Operator"))
-    fig.show()
-
-    fig = px.imshow(a_coarse_encoder, labels=dict(color="Coarse Encoder Operator"))
-    fig.show()
-
     fig = px.imshow(
-        a_rest_coarse_decoder, labels=dict(color="Rest Coarse Decoder Operator")
+        a_coarse_decoder, labels=dict(color="Coarse Decoder Operator")
     )
     fig.show()
 
     fig = px.imshow(
-        a_rest_coarse_encoder, labels=dict(color="Rest Coarse Encoder Operator")
+        a_coarse_encoder, labels=dict(color="Coarse Encoder Operator")
+    )
+    fig.show()
+
+    fig = px.imshow(
+        a_rest_coarse_decoder,
+        labels=dict(color="Rest Coarse Decoder Operator"),
+    )
+    fig.show()
+
+    fig = px.imshow(
+        a_rest_coarse_encoder,
+        labels=dict(color="Rest Coarse Encoder Operator"),
     )
     fig.show()
 

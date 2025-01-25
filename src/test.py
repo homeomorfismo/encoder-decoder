@@ -12,7 +12,11 @@ import keras.optimizers as opt
 from geo2d import make_unit_square
 from encoder import PseudoVcycle
 from data_gen import HelmholtzDGen
-from solver import symmetric_gauss_seidel, forward_gauss_seidel, backward_gauss_seidel
+from solver import (
+    symmetric_gauss_seidel,
+    forward_gauss_seidel,
+    backward_gauss_seidel,
+)
 
 MAX_H = 0.1
 
@@ -58,7 +62,9 @@ def test_all():
         f"SOLVER_SMOOTHING_ITER = {SOLVER_SMOOTHING_ITER}\n\n"
     )
 
-    print("Assembling data-generator and encoder-decoder model: Helmholtz Problem")
+    print(
+        "Assembling data-generator and encoder-decoder model: Helmholtz Problem"
+    )
 
     tf.compat.v1.enable_eager_execution()
 
@@ -120,11 +126,15 @@ def test_all():
     ng.Draw(gf_smooth, mesh, "smooth")
     ng.Draw(gf_ed_smooth, mesh, "ED smooth")
 
-    error = ng.sqrt(ng.Integrate((gf_smooth - gf_ed_smooth) ** 2 * ng.dx, mesh))
+    error = ng.sqrt(
+        ng.Integrate((gf_smooth - gf_ed_smooth) ** 2 * ng.dx, mesh)
+    )
     print(f"\t||u - ED u||_L2 = {error}")
     assert error < ERROR_TOL, f"Error too large! ||u - ED u||_L2 = {error}"
 
-    print("Assembling operators... Check the sparse structure of the operators")
+    print(
+        "Assembling operators... Check the sparse structure of the operators"
+    )
 
     a_fine = helmholtz_gen.rest_operator
     # a = helmholtz_gen.operator
@@ -132,8 +142,12 @@ def test_all():
 
     free_dofs = helmholtz_gen.free_dofs
 
-    decoder_kernel = vcycle.decoder.layers[-1].weights[0].numpy()  # (small, large)
-    encoder_kernel = vcycle.encoder.layers[-1].weights[0].numpy()  # (large, small)
+    decoder_kernel = (
+        vcycle.decoder.layers[-1].weights[0].numpy()
+    )  # (small, large)
+    encoder_kernel = (
+        vcycle.encoder.layers[-1].weights[0].numpy()
+    )  # (large, small)
 
     truncated_decoder_kernel = decoder_kernel.copy()
     truncated_encoder_kernel = encoder_kernel.copy()
@@ -187,10 +201,14 @@ def test_all():
     # fig = px.imshow(a_coarse_encoder, labels=dict(color="E^T @ A @ E"))
     # fig.show()
 
-    fig = px.imshow(a_res_coarse_decoder, labels=dict(color="D @ A_fine @ D^T"))
+    fig = px.imshow(
+        a_res_coarse_decoder, labels=dict(color="D @ A_fine @ D^T")
+    )
     fig.show()
 
-    fig = px.imshow(a_res_coarse_encoder, labels=dict(color="E^T @ A_fine @ E"))
+    fig = px.imshow(
+        a_res_coarse_encoder, labels=dict(color="E^T @ A_fine @ E")
+    )
     fig.show()
 
     fig = px.imshow(
@@ -215,7 +233,9 @@ def test_all():
     print("--- NGSolve solver ---")
 
     sol_ng = helmholtz_gen.get_gf(name="NGSolve")
-    sol_ng.vec.data = a_ng.Inverse(freedofs=helmholtz_gen.space.FreeDofs()) * rhs.vec
+    sol_ng.vec.data = (
+        a_ng.Inverse(freedofs=helmholtz_gen.space.FreeDofs()) * rhs.vec
+    )
     ng.Draw(sol_ng, mesh, "NGSolve solution")
 
     print("--- Symmetric Gauss-Seidel solver ---")
@@ -229,7 +249,9 @@ def test_all():
         if not free_dofs[i]:
             b[i] = 0.0
 
-    x_fine = symmetric_gauss_seidel(a_fine, x_fine, b, tol=1e-10, max_iter=10_000)
+    x_fine = symmetric_gauss_seidel(
+        a_fine, x_fine, b, tol=1e-10, max_iter=10_000
+    )
     sol_sgs.vec.FV().NumPy()[:] = x_fine
     ng.Draw(sol_sgs, mesh, "SGS solution")
 
@@ -258,7 +280,11 @@ def test_all():
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = forward_gauss_seidel(
-            a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
+            a_fine,
+            e_fine,
+            r_fine,
+            tol=1e-10,
+            max_iter=SOLVER_SMOOTHING_ITER,
         )
         x_fine += e_fine
         # Coarse grid correction
@@ -276,7 +302,11 @@ def test_all():
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = np.zeros_like(r_fine)
         e_fine = backward_gauss_seidel(
-            a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
+            a_fine,
+            e_fine,
+            r_fine,
+            tol=1e-10,
+            max_iter=SOLVER_SMOOTHING_ITER,
         )
         x_fine += e_fine
 
@@ -308,7 +338,11 @@ def test_all():
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = forward_gauss_seidel(
-            a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
+            a_fine,
+            e_fine,
+            r_fine,
+            tol=1e-10,
+            max_iter=SOLVER_SMOOTHING_ITER,
         )
         x_fine += e_fine
         # Coarse grid correction
@@ -326,7 +360,11 @@ def test_all():
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = np.zeros_like(r_fine)
         e_fine = backward_gauss_seidel(
-            a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
+            a_fine,
+            e_fine,
+            r_fine,
+            tol=1e-10,
+            max_iter=SOLVER_SMOOTHING_ITER,
         )
         x_fine += e_fine
 
@@ -343,7 +381,9 @@ def test_all():
         "\tCoarse operator: a_res_coarse_truncated_decoder\n"
     )
 
-    sol_tl_truncated_decoder = helmholtz_gen.get_gf(name="TL Truncated Decoder")
+    sol_tl_truncated_decoder = helmholtz_gen.get_gf(
+        name="TL Truncated Decoder"
+    )
 
     b = b_fine.copy()
     x_fine = np.random.rand(len(b))
@@ -358,14 +398,20 @@ def test_all():
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = forward_gauss_seidel(
-            a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
+            a_fine,
+            e_fine,
+            r_fine,
+            tol=1e-10,
+            max_iter=SOLVER_SMOOTHING_ITER,
         )
         x_fine += e_fine
         # Coarse grid correction
         r_fine = np.ravel(b - a_fine @ x_fine)
         r_coarse = np.ravel(truncated_decoder_kernel @ r_fine)
         try:
-            e_coarse = sp.linalg.solve(a_res_coarse_truncated_decoder, r_coarse)
+            e_coarse = sp.linalg.solve(
+                a_res_coarse_truncated_decoder, r_coarse
+            )
         except ValueError:
             print("Unable to solve coarse grid correction")
             x_fine = np.zeros_like(x_fine)
@@ -376,7 +422,11 @@ def test_all():
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = np.zeros_like(r_fine)
         e_fine = backward_gauss_seidel(
-            a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
+            a_fine,
+            e_fine,
+            r_fine,
+            tol=1e-10,
+            max_iter=SOLVER_SMOOTHING_ITER,
         )
         x_fine += e_fine
 
@@ -397,7 +447,9 @@ def test_all():
         "\tCoarse operator: a_res_coarse_truncated_encoder\n"
     )
 
-    sol_tl_truncated_encoder = helmholtz_gen.get_gf(name="TL Truncated Encoder")
+    sol_tl_truncated_encoder = helmholtz_gen.get_gf(
+        name="TL Truncated Encoder"
+    )
 
     b = b_fine.copy()
     x_fine = np.random.rand(len(b))
@@ -412,14 +464,20 @@ def test_all():
         # Pre-smoothing
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = forward_gauss_seidel(
-            a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
+            a_fine,
+            e_fine,
+            r_fine,
+            tol=1e-10,
+            max_iter=SOLVER_SMOOTHING_ITER,
         )
         x_fine += e_fine
         # Coarse grid correction
         r_fine = np.ravel(b - a_fine @ x_fine)
         r_coarse = np.ravel(truncated_encoder_kernel.T @ r_fine)
         try:
-            e_coarse = sp.linalg.solve(a_res_coarse_truncated_encoder, r_coarse)
+            e_coarse = sp.linalg.solve(
+                a_res_coarse_truncated_encoder, r_coarse
+            )
         except ValueError:
             print("Unable to solve coarse grid correction")
             x_fine = np.zeros_like(x_fine)
@@ -430,7 +488,11 @@ def test_all():
         r_fine = np.ravel(b - a_fine @ x_fine)
         e_fine = np.zeros_like(r_fine)
         e_fine = backward_gauss_seidel(
-            a_fine, e_fine, r_fine, tol=1e-10, max_iter=SOLVER_SMOOTHING_ITER
+            a_fine,
+            e_fine,
+            r_fine,
+            tol=1e-10,
+            max_iter=SOLVER_SMOOTHING_ITER,
         )
         x_fine += e_fine
 
