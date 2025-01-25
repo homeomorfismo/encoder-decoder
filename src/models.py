@@ -15,6 +15,8 @@ __FINE_DIM__ = 10
 __BATCH_SIZE__ = 5
 __NUM_BATCHES__ = 50
 __LEARNING_RATE__ = 0.05
+__REGULARIZATION__ = 0.01
+__NORM_ORD__ = 1.0
 
 
 ######################
@@ -89,11 +91,12 @@ def loss_encoder_decoder(
     Loss function for encoder-decoder architecture.
     """
     reconstr_loss = jnp.mean((x - y) ** 2)
-    reg_loss = jnp.linalg.norm(encoder_weights)
-    reg_loss += jnp.linalg.norm(decoder_weights)
+    reg_loss = jnp.linalg.norm(encoder_weights, ord=__NORM_ORD__)
+    reg_loss += jnp.linalg.norm(decoder_weights, ord=__NORM_ORD__)
     reg_loss += jnp.linalg.norm(
         jnp.eye(decoder_weights.shape[0])
-        - jnp.dot(decoder_weights, encoder_weights)
+        - jnp.dot(decoder_weights, encoder_weights),
+        ord=__NORM_ORD__,
     )
     return reconstr_loss + reg * reg_loss
 
@@ -113,11 +116,12 @@ def loss_mg_encoder_decoder(
     reconstr_loss = jnp.mean(
         jnp.dot(x - y, jnp.transpose(decoder_weights)) ** 2
     )
-    reg_loss = jnp.linalg.norm(encoder_weights)
-    reg_loss += jnp.linalg.norm(decoder_weights)
+    reg_loss = jnp.linalg.norm(encoder_weights, ord=__NORM_ORD__)
+    reg_loss += jnp.linalg.norm(decoder_weights, ord=__NORM_ORD__)
     reg_loss += jnp.linalg.norm(
         jnp.eye(decoder_weights.shape[0])
-        - jnp.dot(decoder_weights, encoder_weights)
+        - jnp.dot(decoder_weights, encoder_weights),
+        ord=__NORM_ORD__,
     )
     return reconstr_loss + reg * reg_loss
 
@@ -138,7 +142,7 @@ def update(
         LinearEncoderDecoder(x, encoder_weights, decoder_weights),
         encoder_weights,
         decoder_weights,
-        jnp.array(reg),
+        reg,
     )
     encoder_weights -= lr * grad_ew
     decoder_weights -= lr * grad_dw
@@ -165,7 +169,7 @@ if __name__ == "__main__":
                 LinearEncoderDecoder(x, encoder_weights, decoder_weights),
                 encoder_weights,
                 decoder_weights,
-                0.01,
+                __REGULARIZATION__,
             )
             print(
                 f"\n\tEncoder weights:\n{encoder_weights}"
