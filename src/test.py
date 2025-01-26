@@ -7,19 +7,16 @@ import ngsolve as ng
 import numpy as np
 import scipy as sp
 import plotly.express as px
+import jax.nn.initializers as jinit
+import optax as opt
 
 # local imports
-import loss
-import models
-import solver
+import data_gen as dg
 from geo2d import make_unit_square
-from encoder import PseudoVcycle
-from data_gen import HelmholtzDGen
-from solver import (
-    symmetric_gauss_seidel,
-    forward_gauss_seidel,
-    backward_gauss_seidel,
-)
+import loss as fn
+import models as mdl
+import solver as slv
+import sparse as sps
 
 MAX_H = 0.1
 

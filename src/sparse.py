@@ -10,8 +10,6 @@ From PyAMG documentation:
 
 from enum import Enum
 import scipy.sparse as sp
-
-# import pyamg.aggregation.aggregate as agg
 import pyamg.aggregation as agg
 import numpy as np
 from typing import Any
@@ -22,11 +20,11 @@ __NUM_CLUSTERS__ = 3
 
 
 class AggregationType(Enum):
-    standard_aggregation = "standard_aggregation"
-    naive_aggregation = "naive_aggregation"
-    # pairwise_aggregation = "pairwise_aggregation"
-    lloyd_aggregation = "lloyd_aggregation"
-    balanced_lloyd_aggregation = "balanced_lloyd_aggregation"
+    STANDARD = "standard_aggregation"
+    NAIVE = "naive_aggregation"
+    # PAIRWISE = "pairwise_aggregation"
+    LLOYD = "lloyd_aggregation"
+    BALANCED_LLOYD = "balanced_lloyd_aggregation"
 
 
 def pyamg_get_sparsity_pattern_projector(
@@ -59,7 +57,7 @@ if __name__ == "__main__":
     )
 
     for agg_type in AggregationType:
-        if agg_type == AggregationType.balanced_lloyd_aggregation:
+        if agg_type == AggregationType.BALANCED_LLOYD:
             projector = pyamg_get_sparsity_pattern_projector(
                 matrix, agg_type, num_clusters=__NUM_CLUSTERS__
             )
