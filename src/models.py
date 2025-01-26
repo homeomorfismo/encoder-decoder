@@ -47,7 +47,9 @@ def LinearEncoderDecoder(
         x, encoder_weights, jnp.zeros_like(encoder_weights.shape[1])
     )
     fine_x = LinearLayer(
-        coarse_x, decoder_weights, jnp.zeros_like(decoder_weights.shape[1])
+        coarse_x,
+        decoder_weights,
+        jnp.zeros_like(decoder_weights.shape[1]),
     )
     return fine_x
 
@@ -67,7 +69,9 @@ def MGLinearEncoderDecoder(
         x, encoder_weights, jnp.zeros_like(encoder_weights.shape[1])
     )
     fine_x = LinearLayer(
-        coarse_x, decoder_weights, jnp.zeros_like(decoder_weights.shape[1])
+        coarse_x,
+        decoder_weights,
+        jnp.zeros_like(decoder_weights.shape[1]),
     )
     range_x = LinearLayer(
         fine_x, range_weights, jnp.zeros_like(range_weights.shape[1])

@@ -39,11 +39,19 @@ def test_vcycle_complex():
     x_data_random_complex = helmholtz_gen.from_random(1000, field="complex")
 
     x_data_smooth = np.concatenate(
-        (x_data_smooth_real, x_data_smooth_imag, x_data_smooth_complex),
+        (
+            x_data_smooth_real,
+            x_data_smooth_imag,
+            x_data_smooth_complex,
+        ),
         axis=0,
     )
     x_data_random = np.concatenate(
-        (x_data_random_real, x_data_random_imag, x_data_random_complex),
+        (
+            x_data_random_real,
+            x_data_random_imag,
+            x_data_random_complex,
+        ),
         axis=0,
     )
 

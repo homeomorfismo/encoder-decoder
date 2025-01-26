@@ -1,14 +1,17 @@
 """
-Cleaner version of the tests scripts.
+Wrappers for testing the encoder-decoder model and the two-level solver models,
+using JAX.
 """
 
 import ngsolve as ng
 import numpy as np
 import scipy as sp
-import tensorflow as tf
 import plotly.express as px
-import keras.optimizers as opt
 
+# local imports
+import loss
+import models
+import solver
 from geo2d import make_unit_square
 from encoder import PseudoVcycle
 from data_gen import HelmholtzDGen
@@ -431,7 +434,11 @@ def test_all():
         x_fine += e_fine
 
     sol_tl_truncated_decoder.vec.FV().NumPy()[:] = x_fine
-    ng.Draw(sol_tl_truncated_decoder, mesh, "TL Truncated Decoder solution")
+    ng.Draw(
+        sol_tl_truncated_decoder,
+        mesh,
+        "TL Truncated Decoder solution",
+    )
 
     error = ng.sqrt(
         ng.Integrate((sol_ng - sol_tl_truncated_decoder) ** 2 * ng.dx, mesh)
@@ -497,7 +504,11 @@ def test_all():
         x_fine += e_fine
 
     sol_tl_truncated_encoder.vec.FV().NumPy()[:] = x_fine
-    ng.Draw(sol_tl_truncated_encoder, mesh, "TL Truncated Encoder solution")
+    ng.Draw(
+        sol_tl_truncated_encoder,
+        mesh,
+        "TL Truncated Encoder solution",
+    )
 
     error = ng.sqrt(
         ng.Integrate((sol_ng - sol_tl_truncated_encoder) ** 2 * ng.dx, mesh)

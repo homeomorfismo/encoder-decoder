@@ -14,7 +14,10 @@ def make_unit_square() -> SplineGeometry:
     points = [(0, 0), (1, 0), (1, 1), (0, 1)]
     points_ids = [geo.AppendPoint(*point) for point in points]
     lines = [
-        [["line", points_ids[i % 4], points_ids[(i + 1) % 4]], "boundary"]
+        [
+            ["line", points_ids[i % 4], points_ids[(i + 1) % 4]],
+            "boundary",
+        ]
         for i in range(4)
     ]
     for line, bc in lines:
@@ -30,7 +33,10 @@ def make_l_shape() -> SplineGeometry:
     points = [(0, 0), (0, 1), (-1, 1), (-1, -1), (1, -1), (1, 0)]
     points_ids = [geo.AppendPoint(*point) for point in points]
     lines = [
-        [["line", points_ids[i % 6], points_ids[(i + 1) % 6]], "boundary"]
+        [
+            ["line", points_ids[i % 6], points_ids[(i + 1) % 6]],
+            "boundary",
+        ]
         for i in range(6)
     ]
     for line, bc in lines:

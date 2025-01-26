@@ -160,7 +160,8 @@ class BasicConvDiffDataGen(DataGenerator):
         a_row, a_col, a_val = a.mat.COO()
         self.operator = jnp.array(
             sp.csr_matrix(
-                (a_val, (a_row, a_col)), shape=(a.mat.height, a.mat.width)
+                (a_val, (a_row, a_col)),
+                shape=(a.mat.height, a.mat.width),
             ).todense()
         )
         self.free_dofs = jnp.array(list(fes.FreeDofs()))
