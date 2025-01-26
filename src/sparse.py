@@ -4,11 +4,8 @@ These matrices define sparsity patterns for a (semi)-sparse encoder-decoder meth
 """
 
 from enum import Enum
-import jax
-import jax.numpy as jnp
 import scipy.sparse as sp
 import pyamg.aggregation as agg
-from typing import Tuple
 
 
 class AggregationType(Enum):
@@ -37,3 +34,20 @@ def pyamg_get_sparsity_pattern_projector(
     except KeyError:
         raise ValueError(f"Invalid aggregation type: {agg_type}")
     return aggregation_method(matrix)
+
+
+if __name__ == "__main__":
+    import numpy as np
+
+    # Test sparsity pattern projector
+    matrix = sp.csr_matrix(np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]]))
+    projector = pyamg_get_sparsity_pattern_projector(matrix, "STANDARD")
+    print(projector.toarray())
+    projector = pyamg_get_sparsity_pattern_projector(matrix, "NAIVE")
+    print(projector.toarray())
+    projector = pyamg_get_sparsity_pattern_projector(matrix, "PAIRWISE")
+    print(projector.toarray())
+    projector = pyamg_get_sparsity_pattern_projector(matrix, "LLOYD")
+    print(projector.toarray())
+    projector = pyamg_get_sparsity_pattern_projector(matrix, "BALANCED_LLOYD")
+    print(projector.toarray())

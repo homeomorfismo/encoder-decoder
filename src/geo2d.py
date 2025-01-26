@@ -2,7 +2,7 @@
 Basic 2D geometries.
 """
 
-from ngsolve import Draw, Mesh
+from ngsolve import Draw
 from netgen.geom2d import SplineGeometry
 
 

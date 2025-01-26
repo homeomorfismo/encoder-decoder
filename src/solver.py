@@ -2,7 +2,6 @@
 Linear algebra solvers using JAX
 """
 
-import jax
 import jax.numpy as jnp
 from jax import jit
 from typing import Tuple
