@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 import scipy.sparse as sp
 import ngsolve as ng
+import pickle as pkl
 
 # local imports
 from solver import coordinate_descent
@@ -66,6 +67,15 @@ class DataGenerator(ABC):
         pass
 
     @abstractmethod
+    def save_data_gen(self, path: str) -> None:
+        """
+        Save the data generator to a file.
+
+        Args:
+            path: str
+        """
+        pass
+
     def get_gf(self, name: str = "gf") -> ng.GridFunction:
         """
         Get a GridFunction for the data generator.
@@ -78,7 +88,7 @@ class DataGenerator(ABC):
             GridFunction
                 GridFunction object.
         """
-        pass
+        return ng.GridFunction(self.space, name=name)
 
     def assemble(self, *args) -> None:
         """
@@ -234,8 +244,18 @@ class BasicConvDiffDataGen(DataGenerator):
 
         return x_data
 
-    def get_gf(self, name: str = "gf"):
-        return ng.GridFunction(self.space, name=name)
+    def save_data_gen(self, path: str):
+        kwargs = {
+            "mesh": self.space.mesh.ngmesh,
+            # "maxh":
+            "tol": self.tol,
+            "order": self.space.order,
+            "iterations": self.iterations,
+            "is_complex": self.is_complex,
+            "is_dirichlet": self.space.dirichlet,
+        }
+        with open(path, "wb") as f:
+            pkl.dump(kwargs, f)
 
 
 if __name__ == "__main__":
