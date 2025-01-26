@@ -32,5 +32,6 @@ n_epochs = 100
 freq = 10
 
 [output]
-save_weights = true
+save_weights = false
 plot_weights = true
+strict_assert = false

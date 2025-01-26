@@ -92,6 +92,7 @@ def linear_encoder_decoder(config: dict) -> None:
     freq = config["training"]["freq"]
     save_weights = config["output"]["save_weights"]
     plot_weights = config["output"]["plot_weights"]
+    strict_assert = config["output"]["strict_assert"]
 
     print("\n->Creating mesh and data...")
     square = ng.Mesh(make_unit_square().GenerateMesh(maxh=maxh))
@@ -213,7 +214,13 @@ def linear_encoder_decoder(config: dict) -> None:
         )
     )
     print(f"\n\t-> L2 error: {error:.10f}")
-    # assert np.isclose(error, 0.0, atol=1e-1), f"Error: {error:.10f}, expected less than 1e-1!"
+    if strict_assert:
+        assert np.isclose(
+            error,
+            0.0,
+            atol=1e-1,
+            rtol=1e-1,
+        ), f"Error: {error:.10f}, expected less than 1e-1!"
 
     # Test 2: Wrap the encoder-decoder model in a two-level solver
     # TODO
