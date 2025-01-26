@@ -57,7 +57,7 @@ def forward_gauss_seidel(
     x: jnp.ndarray,
     b: jnp.ndarray,
     tol: float = 1e-6,
-    max_iter: int = 1000,
+    max_iter: int = 1_000,
     verbose: bool = False,
 ) -> jnp.ndarray:
     """
@@ -78,7 +78,7 @@ def backward_gauss_seidel(
     x: jnp.ndarray,
     b: jnp.ndarray,
     tol: float = 1e-6,
-    max_iter: int = 1000,
+    max_iter: int = 1_000,
     verbose: bool = False,
 ) -> jnp.ndarray:
     """
@@ -99,7 +99,7 @@ def symmetric_gauss_seidel(
     x: jnp.ndarray,
     b: jnp.ndarray,
     tol: float = 1e-6,
-    max_iter: int = 1000,
+    max_iter: int = 1_000,
     verbose: bool = False,
 ) -> jnp.ndarray:
     """
@@ -139,7 +139,7 @@ def test_backward_gauss_seidel() -> None:
     b = jnp.dot(matrix, 2.0 * jnp.ones(2))
     x = jnp.array([1.0, 1.0])  # Initial guess
     # Ensure max_iter is a concrete value
-    max_iter = 1000
+    max_iter = 1_000
     x = backward_gauss_seidel(
         matrix, x, b, tol=1e-6, max_iter=max_iter, verbose=True
     )
@@ -158,7 +158,7 @@ def test_symmetric_gauss_seidel() -> None:
     b = jnp.dot(matrix, 2.0 * jnp.ones(20))
     x = jnp.array([1.0] * 20)  # Initial guess
     # Ensure max_iter is a concrete value
-    max_iter = 1000
+    max_iter = 1_000
     x = symmetric_gauss_seidel(
         matrix, x, b, tol=1e-6, max_iter=max_iter, verbose=True
     )
