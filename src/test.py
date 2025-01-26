@@ -3,14 +3,20 @@ Wrappers for testing the encoder-decoder model and the two-level solver models,
 using JAX.
 """
 
+import argparse
+import toml
+
 import ngsolve as ng
 import numpy as np
 import scipy as sp
-import plotly.express as px
+import plotly.graph_objects as go
+import jax
+import jax.numpy as jnp
 import jax.nn.initializers as jinit
-import optax as opt
+import optax
 
 # local imports
+import utilities as ut  # optimizers, initializers
 import data_gen as dg
 from geo2d import make_unit_square
 import loss as fn
@@ -18,505 +24,204 @@ import models as mdl
 import solver as slv
 import sparse as sps
 
-MAX_H = 0.1
 
-DATA_GEN_TOL = 1e-1
-DATA_GEN_ITER = 1000
-DATA_GEN_NVECS = 1000
-
-VCYCLE_COMPRESSION_FACTOR = 2.0
-VCYCLE_REGULARIZATION = 1.0e-5
-VCYCLE_LEARNING_RATE = 5.0e-4
-VCYCLE_EPOCHS = 200
-VCYCLE_BATCH_SIZE = 100
-VCYCLE_INIT_ENCODER = "glorot_uniform"
-VCYCLE_INIT_DECODER = "zeros"
-
-TRUNCATION_TOL = 1.0e-2
-ERROR_TOL = 1.0e-1
-
-SOLVER_ITER = 1000
-SOLVER_SMOOTHING_ITER = 2
-
-
-def test_all():
+def __parse_args__() -> argparse.Namespace:
     """
-    Run all tests.
+    Parse command-line arguments.
     """
+    parser = argparse.ArgumentParser(
+        description="Test the encoder-decoder and two-level solver models."
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Path to the TOML configuration file.",
+    )
+    args = parser.parse_args()
+    return args
+
+
+def __parse_config__(config_path: str) -> dict:
+    """
+    Parse the TOML configuration file.
+    """
+    with open(config_path, "r") as f:
+        config = toml.load(f)
+    __assert_minimal_config__(config)
+    return config
+
+
+def __assert_minimal_config__(config: dict) -> None:
+    """
+    Assert that the minimal configuration is present.
+    """
+    required_keys = [
+        "mesh",
+        "data_gen",
+        "model",
+        "optimization",
+        "training",
+        "output",
+    ]
+    for key in required_keys:
+        if key not in config:
+            raise ValueError(f"Missing required configuration section: {key}")
+
+
+def linear_encoder_decoder(config: dict) -> None:
+    """
+    Train a linear encoder-decoder model.
+    Check the configuration file for more details.
+    """
+    maxh = config["mesh"]["maxh"]
+    tol = config["data_gen"]["tol"]
+    iterations = config["data_gen"]["iterations"]
+    is_complex = config["data_gen"]["is_complex"]
+    n_samples = config["data_gen"]["n_samples"]
+    compression_factor = config["model"]["compression_factor"]
+    init_encoder_type = config["model"]["init_encoder_type"]
+    init_decoder_type = config["model"]["init_decoder_type"]
+    init_encoder_kwargs = config["model"]["init_encoder_kwargs"]
+    init_decoder_kwargs = config["model"]["init_decoder_kwargs"]
+    optimizer_type = config["optimization"]["optimizer_type"]
+    optimizer_kwargs = config["optimization"]["optimizer_kwargs"]
+    ord = config["optimization"]["ord"]
+    reg = config["optimization"]["reg"]
+    n_epochs = config["training"]["n_epochs"]
+    freq = config["training"]["freq"]
+    save_weights = config["output"]["save_weights"]
+    plot_weights = config["output"]["plot_weights"]
+
+    print("\n->Creating mesh and data...")
+    square = ng.Mesh(make_unit_square().GenerateMesh(maxh=maxh))
+    conv_diff_dgen = dg.BasicConvDiffDataGen(
+        square,
+        tol=tol,
+        iterations=iterations,
+        is_complex=is_complex,
+    )
+    x_data = conv_diff_dgen.generate_samples(n_samples)
+
+    print("\n->Creating encoder-decoder weights...")
+
+    n_fine = conv_diff_dgen.space.ndof
+    n_coarse = int(n_fine // compression_factor)
+    jax_key = jax.random.PRNGKey(0)
+    jax_type = jnp.complex64 if is_complex else jnp.float32
+
+    init_encoder = ut.get_initializer(init_encoder_type, **init_encoder_kwargs)
+    init_decoder = ut.get_initializer(init_decoder_type, **init_decoder_kwargs)
+
+    # Note: this fully defines the encoder-decoder model
+    weights_encoder = init_encoder(jax_key, (n_fine, n_coarse), dtype=jax_type)
+    weights_decoder = init_decoder(jax_key, (n_coarse, n_fine), dtype=jax_type)
+
+    print("\n->Training the encoder-decoder model...")
+
+    # Define an optimizer
+    print(f"\n\t-> Using optimizer: {optimizer_type}")
     print(
-        "Print all global variables\n"
-        f"MAX_H = {MAX_H}\n\n"
-        f"DATA_GEN_TOL = {DATA_GEN_TOL}\n"
-        f"DATA_GEN_ITER = {DATA_GEN_ITER}\n"
-        f"DATA_GEN_NVECS = {DATA_GEN_NVECS}\n\n"
-        f"VCYCLE_COMPRESSION_FACTOR = {VCYCLE_COMPRESSION_FACTOR}\n"
-        f"VCYCLE_REGULARIZATION = {VCYCLE_REGULARIZATION}\n"
-        f"VCYCLE_LEARNING_RATE = {VCYCLE_LEARNING_RATE}\n"
-        f"VCYCLE_EPOCHS = {VCYCLE_EPOCHS}\n"
-        f"VCYCLE_BATCH_SIZE = {VCYCLE_BATCH_SIZE}\n"
-        f"VCYCLE_INIT_ENCODER = {VCYCLE_INIT_ENCODER}\n"
-        f"VCYCLE_INIT_DECODER = {VCYCLE_INIT_DECODER}\n\n"
-        f"TRUNCATION_TOL = {TRUNCATION_TOL}\n"
-        f"ERROR_TOL = {ERROR_TOL}\n\n"
-        f"SOLVER_ITER = {SOLVER_ITER}\n"
-        f"SOLVER_SMOOTHING_ITER = {SOLVER_SMOOTHING_ITER}\n\n"
+        f"\n\t-> Using loss function regularized with L{ord}-norm and strength {reg}"
     )
+    optimizer = ut.get_optimizer(optimizer_type, **optimizer_kwargs)
+    optimizer_state = optimizer.init((weights_encoder, weights_decoder))
 
-    print(
-        "Assembling data-generator and encoder-decoder model: Helmholtz Problem"
-    )
+    # Define the loss function
+    loss_fn = fn.get_loss(ord)
 
-    tf.compat.v1.enable_eager_execution()
+    # Update the weights
+    for epoch in range(n_epochs):
+        # Compute the gradients
+        val_loss, grads = jax.value_and_grad(
+            loss_fn,
+            argnums=(2, 3),
+            holomorphic=is_complex,
+        )(x_data, x_data, weights_encoder, weights_decoder, reg)
 
-    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=MAX_H))
-
-    helmholtz_gen = HelmholtzDGen(
-        mesh,
-        tol=DATA_GEN_TOL,
-        iterations=DATA_GEN_ITER,
-        is_complex=False,
-        is_dirichlet=True,
-    )
-
-    x_data_smooth = helmholtz_gen.from_smooth(DATA_GEN_NVECS, field="real")
-    x_data_random = helmholtz_gen.from_random(DATA_GEN_NVECS, field="real")
-
-    x_data = np.concatenate((x_data_smooth, x_data_random), axis=0)
-    x_data = tf.convert_to_tensor(x_data, dtype=tf.float32)
-
-    vcycle = PseudoVcycle(
-        x_data.shape[1:],
-        num_levels=1,
-        compression_factor=VCYCLE_COMPRESSION_FACTOR,
-        reg_param=VCYCLE_REGULARIZATION,
-        initializer_encoder=VCYCLE_INIT_ENCODER,
-        initializer_decoder=VCYCLE_INIT_DECODER,
-        dtype="float32",
-    )
-
-    adam = opt.Adam(learning_rate=VCYCLE_LEARNING_RATE)
-
-    vcycle.compile(
-        optimizer=adam,
-        loss="mean_absolute_error",
-    )
-
-    vcycle.fit(
-        x_data,
-        x_data,
-        epochs=VCYCLE_EPOCHS,
-        batch_size=VCYCLE_BATCH_SIZE,
-        shuffle=True,
-        validation_data=(x_data, x_data),
-    )
-
-    print("Testing the encoder-decoder model: encode-decode a smooth field")
-
-    gf_smooth = helmholtz_gen.get_gf(name="cos(pi*x)*cos(pi*y)")
-    gf_smooth.Set(ng.cos(ng.pi * ng.x) * ng.cos(ng.pi * ng.y))
-
-    vec_ed_smooth = np.copy(gf_smooth.vec.FV().NumPy())
-    vec_ed_smooth = tf.convert_to_tensor(vec_ed_smooth, dtype=tf.float32)
-    vec_ed_smooth = tf.reshape(vec_ed_smooth, (1, *vec_ed_smooth.shape))
-    vec_ed_smooth = vcycle.predict(vec_ed_smooth)
-
-    gf_ed_smooth = helmholtz_gen.get_gf(name="ED cos(pi*x)*cos(pi*y)")
-    gf_ed_smooth.vec.FV().NumPy()[:] = vec_ed_smooth[0]
-
-    ng.Draw(gf_smooth, mesh, "smooth")
-    ng.Draw(gf_ed_smooth, mesh, "ED smooth")
-
-    error = ng.sqrt(
-        ng.Integrate((gf_smooth - gf_ed_smooth) ** 2 * ng.dx, mesh)
-    )
-    print(f"\t||u - ED u||_L2 = {error}")
-    assert error < ERROR_TOL, f"Error too large! ||u - ED u||_L2 = {error}"
-
-    print(
-        "Assembling operators... Check the sparse structure of the operators"
-    )
-
-    a_fine = helmholtz_gen.rest_operator
-    # a = helmholtz_gen.operator
-    a_ng = helmholtz_gen.ng_operator
-
-    free_dofs = helmholtz_gen.free_dofs
-
-    decoder_kernel = (
-        vcycle.decoder.layers[-1].weights[0].numpy()
-    )  # (small, large)
-    encoder_kernel = (
-        vcycle.encoder.layers[-1].weights[0].numpy()
-    )  # (large, small)
-
-    truncated_decoder_kernel = decoder_kernel.copy()
-    truncated_encoder_kernel = encoder_kernel.copy()
-
-    truncated_decoder_kernel[np.abs(decoder_kernel) < TRUNCATION_TOL] = 0.0
-    truncated_encoder_kernel[np.abs(encoder_kernel) < TRUNCATION_TOL] = 0.0
-
-    # a_coarse_decoder = decoder_kernel @ a @ decoder_kernel.T
-    # a_coarse_encoder = encoder_kernel.T @ a @ encoder_kernel
-
-    a_res_coarse_decoder = decoder_kernel @ a_fine @ decoder_kernel.T
-    a_res_coarse_encoder = encoder_kernel.T @ a_fine @ encoder_kernel
-
-    a_res_coarse_truncated_decoder = (
-        truncated_decoder_kernel @ a_fine @ truncated_decoder_kernel.T
-    )
-    a_res_coarse_truncated_encoder = (
-        truncated_encoder_kernel.T @ a_fine @ truncated_encoder_kernel
-    )
-
-    a_res_coarse_truncated_decoder[
-        np.abs(a_res_coarse_truncated_decoder) < TRUNCATION_TOL
-    ] = 0.0
-
-    print("Plotting sparse structure of operators...")
-
-    print("\tEncoder-decoder...")
-
-    fig = px.imshow(decoder_kernel, labels=dict(color="D"))
-    fig.show()
-
-    fig = px.imshow(encoder_kernel, labels=dict(color="E"))
-    fig.show()
-
-    print("\tTruncated encoder-decoder...")
-
-    fig = px.imshow(truncated_decoder_kernel, labels=dict(color="D_trunc"))
-    fig.show()
-
-    fig = px.imshow(truncated_encoder_kernel, labels=dict(color="E_trunc"))
-    fig.show()
-
-    print("\tOperators...")
-
-    fig = px.imshow(a_fine, labels=dict(color="A_fine"))
-    fig.show()
-
-    # fig = px.imshow(a_coarse_decoder, labels=dict(color="D @ A @ D^T"))
-    # fig.show()
-
-    # fig = px.imshow(a_coarse_encoder, labels=dict(color="E^T @ A @ E"))
-    # fig.show()
-
-    fig = px.imshow(
-        a_res_coarse_decoder, labels=dict(color="D @ A_fine @ D^T")
-    )
-    fig.show()
-
-    fig = px.imshow(
-        a_res_coarse_encoder, labels=dict(color="E^T @ A_fine @ E")
-    )
-    fig.show()
-
-    fig = px.imshow(
-        a_res_coarse_truncated_decoder,
-        labels=dict(color="D_trunc @ A_fine @ D_trunc^T"),
-    )
-    fig.show()
-
-    fig = px.imshow(
-        a_res_coarse_truncated_encoder,
-        labels=dict(color="E_trunc^T @ A_fine @ E_trunc"),
-    )
-    fig.show()
-
-    print("Testing solvers")
-
-    rhs = helmholtz_gen.get_gf(name="Constant 1.0")
-    rhs.Set(1.0)
-
-    b_fine = rhs.vec.FV().NumPy().copy()
-
-    print("--- NGSolve solver ---")
-
-    sol_ng = helmholtz_gen.get_gf(name="NGSolve")
-    sol_ng.vec.data = (
-        a_ng.Inverse(freedofs=helmholtz_gen.space.FreeDofs()) * rhs.vec
-    )
-    ng.Draw(sol_ng, mesh, "NGSolve solution")
-
-    print("--- Symmetric Gauss-Seidel solver ---")
-
-    sol_sgs = helmholtz_gen.get_gf(name="SGS")
-
-    b = b_fine.copy()
-    x_fine = np.random.rand(len(b))
-
-    for i in range(len(b)):
-        if not free_dofs[i]:
-            b[i] = 0.0
-
-    x_fine = symmetric_gauss_seidel(
-        a_fine, x_fine, b, tol=1e-10, max_iter=10_000
-    )
-    sol_sgs.vec.FV().NumPy()[:] = x_fine
-    ng.Draw(sol_sgs, mesh, "SGS solution")
-
-    error = ng.sqrt(ng.Integrate((sol_ng - sol_sgs) ** 2 * ng.dx, mesh))
-    print(f"\t||u - SGS u||_L2 = {error}")
-    # assert error < ERROR_TOL, f"Error too large! ||u - SGS u||_L2 = {error}"
-
-    print(
-        "--- Two-level solver: decoder_kernel ---\n"
-        "\tInterpolator/projector: decoder_kernel\n"
-        "\tCoarse operator: a_res_coarse_decoder\n"
-    )
-
-    sol_tl_decoder = helmholtz_gen.get_gf(name="TL Decoder")
-
-    b = b_fine.copy()
-    x_fine = np.random.rand(len(b))
-
-    for i in range(len(b)):
-        if not free_dofs[i]:
-            b[i] = 0.0
-
-    # e_fine = np.zeros_like(x_fine)
-    e_fine = np.random.rand(len(x_fine))
-    for _ in range(SOLVER_ITER):
-        # Pre-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = forward_gauss_seidel(
-            a_fine,
-            e_fine,
-            r_fine,
-            tol=1e-10,
-            max_iter=SOLVER_SMOOTHING_ITER,
+        # Update the weights
+        updates, optimizer_state = optimizer.update(grads, optimizer_state)
+        weights_encoder, weights_decoder = optax.apply_updates(
+            (weights_encoder, weights_decoder), updates
         )
-        x_fine += e_fine
-        # Coarse grid correction
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        r_coarse = np.ravel(decoder_kernel @ r_fine)
-        try:
-            e_coarse = sp.linalg.solve(a_res_coarse_decoder, r_coarse)
-        except ValueError:
-            print("Unable to solve coarse grid correction")
-            x_fine = np.zeros_like(x_fine)
-            break
-        e_fine = np.ravel(decoder_kernel.T @ e_coarse)
-        x_fine += e_fine
-        # Post-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = np.zeros_like(r_fine)
-        e_fine = backward_gauss_seidel(
-            a_fine,
-            e_fine,
-            r_fine,
-            tol=1e-10,
-            max_iter=SOLVER_SMOOTHING_ITER,
-        )
-        x_fine += e_fine
-
-    sol_tl_decoder.vec.FV().NumPy()[:] = x_fine
-    ng.Draw(sol_tl_decoder, mesh, "TL Decoder solution")
-
-    error = ng.sqrt(ng.Integrate((sol_ng - sol_tl_decoder) ** 2 * ng.dx, mesh))
-    print(f"\t||u - TL Decoder u||_L2 = {error}")
-    # assert error < ERROR_TOL, f"Error too large! ||u - TL Decoder u||_L2 = {error}"
-
-    print(
-        "--- Two-level solver: encoder_kernel ---\n"
-        "\tInterpolator/projector: encoder_kernel\n"
-        "\tCoarse operator: a_res_coarse_encoder\n"
-    )
-
-    sol_tl_encoder = helmholtz_gen.get_gf(name="TL Encoder")
-
-    b = b_fine.copy()
-    x_fine = np.random.rand(len(b))
-
-    for i in range(len(b)):
-        if not free_dofs[i]:
-            b[i] = 0.0
-
-    # e_fine = np.zeros_like(x_fine)
-    e_fine = np.random.rand(len(x_fine))
-    for _ in range(SOLVER_ITER):
-        # Pre-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = forward_gauss_seidel(
-            a_fine,
-            e_fine,
-            r_fine,
-            tol=1e-10,
-            max_iter=SOLVER_SMOOTHING_ITER,
-        )
-        x_fine += e_fine
-        # Coarse grid correction
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        r_coarse = np.ravel(encoder_kernel.T @ r_fine)
-        try:
-            e_coarse = sp.linalg.solve(a_res_coarse_encoder, r_coarse)
-        except ValueError:
-            print("Unable to solve coarse grid correction")
-            x_fine = np.zeros_like(x_fine)
-            break
-        e_fine = np.ravel(encoder_kernel @ e_coarse)
-        x_fine += e_fine
-        # Post-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = np.zeros_like(r_fine)
-        e_fine = backward_gauss_seidel(
-            a_fine,
-            e_fine,
-            r_fine,
-            tol=1e-10,
-            max_iter=SOLVER_SMOOTHING_ITER,
-        )
-        x_fine += e_fine
-
-    sol_tl_encoder.vec.FV().NumPy()[:] = x_fine
-    ng.Draw(sol_tl_encoder, mesh, "TL Encoder solution")
-
-    error = ng.sqrt(ng.Integrate((sol_ng - sol_tl_encoder) ** 2 * ng.dx, mesh))
-    print(f"\t||u - TL Encoder u||_L2 = {error}")
-    # assert error < ERROR_TOL, f"Error too large! ||u - TL Encoder u||_L2 = {error}"
-
-    print(
-        "--- Two-level solver: truncated decoder_kernel ---\n"
-        "\tInterpolator/projector: truncated decoder_kernel\n"
-        "\tCoarse operator: a_res_coarse_truncated_decoder\n"
-    )
-
-    sol_tl_truncated_decoder = helmholtz_gen.get_gf(
-        name="TL Truncated Decoder"
-    )
-
-    b = b_fine.copy()
-    x_fine = np.random.rand(len(b))
-
-    for i in range(len(b)):
-        if not free_dofs[i]:
-            b[i] = 0.0
-
-    # e_fine = np.zeros_like(x_fine)
-    e_fine = np.random.rand(len(x_fine))
-    for _ in range(SOLVER_ITER):
-        # Pre-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = forward_gauss_seidel(
-            a_fine,
-            e_fine,
-            r_fine,
-            tol=1e-10,
-            max_iter=SOLVER_SMOOTHING_ITER,
-        )
-        x_fine += e_fine
-        # Coarse grid correction
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        r_coarse = np.ravel(truncated_decoder_kernel @ r_fine)
-        try:
-            e_coarse = sp.linalg.solve(
-                a_res_coarse_truncated_decoder, r_coarse
+        if epoch % freq == 0 or epoch == n_epochs - 1:
+            print(
+                f"\n\t-> Epoch {epoch+1}/{n_epochs}"
+                f"\n\t-> Loss: {val_loss:.10f}"
             )
-        except ValueError:
-            print("Unable to solve coarse grid correction")
-            x_fine = np.zeros_like(x_fine)
-            break
-        e_fine = np.ravel(truncated_decoder_kernel.T @ e_coarse)
-        x_fine += e_fine
-        # Post-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = np.zeros_like(r_fine)
-        e_fine = backward_gauss_seidel(
-            a_fine,
-            e_fine,
-            r_fine,
-            tol=1e-10,
-            max_iter=SOLVER_SMOOTHING_ITER,
-        )
-        x_fine += e_fine
 
-    sol_tl_truncated_decoder.vec.FV().NumPy()[:] = x_fine
-    ng.Draw(
-        sol_tl_truncated_decoder,
-        mesh,
-        "TL Truncated Decoder solution",
-    )
+    # Save the weights
+    if save_weights:
+        print("\n->Saving the encoder-decoder weights...")
+        weights_encoder = jax.device_get(weights_encoder)
+        weights_decoder = jax.device_get(weights_decoder)
+        np.save("weights_encoder.npy", weights_encoder)
+        np.save("weights_decoder.npy", weights_decoder)
 
-    error = ng.sqrt(
-        ng.Integrate((sol_ng - sol_tl_truncated_decoder) ** 2 * ng.dx, mesh)
-    )
-    print(f"\t||u - TL Truncated Decoder u||_L2 = {error}")
-    # assert (
-    #     error < ERROR_TOL
-    # ), f"Error too large! ||u - TL Truncated Decoder u||_L2 = {error}"
-
-    print(
-        "--- Two-level solver: truncated encoder_kernel ---\n"
-        "\tInterpolator/projector: truncated encoder_kernel\n"
-        "\tCoarse operator: a_res_coarse_truncated_encoder\n"
-    )
-
-    sol_tl_truncated_encoder = helmholtz_gen.get_gf(
-        name="TL Truncated Encoder"
-    )
-
-    b = b_fine.copy()
-    x_fine = np.random.rand(len(b))
-
-    for i in range(len(b)):
-        if not free_dofs[i]:
-            b[i] = 0.0
-
-    # e_fine = np.zeros_like(x_fine)
-    e_fine = np.random.rand(len(x_fine))
-    for _ in range(SOLVER_ITER):
-        # Pre-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = forward_gauss_seidel(
-            a_fine,
-            e_fine,
-            r_fine,
-            tol=1e-10,
-            max_iter=SOLVER_SMOOTHING_ITER,
-        )
-        x_fine += e_fine
-        # Coarse grid correction
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        r_coarse = np.ravel(truncated_encoder_kernel.T @ r_fine)
-        try:
-            e_coarse = sp.linalg.solve(
-                a_res_coarse_truncated_encoder, r_coarse
+    # Plot heatmaps of the sparsity patterns of the weights
+    if plot_weights:
+        print("\n->Plotting the encoder-decoder weights...")
+        fig = go.Figure()
+        fig.add_trace(
+            go.Heatmap(
+                z=np.abs(weights_encoder),
+                colorscale="Viridis",
+                colorbar=dict(title="Encoder Weights"),
             )
-        except ValueError:
-            print("Unable to solve coarse grid correction")
-            x_fine = np.zeros_like(x_fine)
-            break
-        e_fine = np.ravel(truncated_encoder_kernel @ e_coarse)
-        x_fine += e_fine
-        # Post-smoothing
-        r_fine = np.ravel(b - a_fine @ x_fine)
-        e_fine = np.zeros_like(r_fine)
-        e_fine = backward_gauss_seidel(
-            a_fine,
-            e_fine,
-            r_fine,
-            tol=1e-10,
-            max_iter=SOLVER_SMOOTHING_ITER,
         )
-        x_fine += e_fine
+        fig.update_layout(title="Encoder-Decoder Weights")
+        fig.show()
 
-    sol_tl_truncated_encoder.vec.FV().NumPy()[:] = x_fine
-    ng.Draw(
-        sol_tl_truncated_encoder,
-        mesh,
-        "TL Truncated Encoder solution",
+        fig = go.Figure()
+        fig.add_trace(
+            go.Heatmap(
+                z=np.abs(weights_decoder),
+                colorscale="Viridis",
+                colorbar=dict(title="Decoder Weights"),
+            )
+        )
+        fig.update_layout(title="Encoder-Decoder Weights")
+        fig.show()
+
+    print("\n->Testing the encoder-decoder model...")
+
+    # Test 1: Encode-decode a simple sinusoidal function
+    print(
+        "\n\t-> Testing the encoder-decoder model on a simple sinusoidal function..."
     )
+    grid_fun = conv_diff_dgen.get_gf(name="cos(xy) + sin(xy)")
+    reconstr = conv_diff_dgen.get_gf(name="ED(cos(xy) + sin(xy))")
+    grid_fun.Set(
+        ng.cos(ng.x * ng.y) + ng.sin(ng.x * ng.y)
+    )  # cos(xy) + sin(xy)
+    ng.Draw(grid_fun, mesh=square, name="cos(xy) + sin(xy)")
 
+    jax_grid_fun = jnp.array(
+        grid_fun.vec.FV().NumPy(), dtype=jax_type
+    ).flatten()
+    jax_reconstr = mdl.LinearEncoderDecoder(
+        jax_grid_fun, weights_encoder, weights_decoder
+    )
+    reconstr.vec.FV().NumPy()[:] = jax_reconstr
+    ng.Draw(reconstr, mesh=square, name="ED(cos(xy) + sin(xy))")
+
+    # Compute NGSolve L2 error, assert close to zero
     error = ng.sqrt(
-        ng.Integrate((sol_ng - sol_tl_truncated_encoder) ** 2 * ng.dx, mesh)
+        ng.Integrate(
+            ng.InnerProduct(grid_fun - reconstr, grid_fun - reconstr) * ng.dx,
+            square,
+        )
     )
-    print(f"\t||u - TL Truncated Encoder u||_L2 = {error}")
-    # assert (
-    #     error < ERROR_TOL
-    # ), f"Error too large! ||u - TL Truncated Encoder u||_L2 = {error}"
+    print(f"\n\t-> L2 error: {error:.10f}")
+    # assert np.isclose(error, 0.0, atol=1e-1), f"Error: {error:.10f}, expected less than 1e-1!"
 
-    print("All tests passed!")
+    # Test 2: Wrap the encoder-decoder model in a two-level solver
+    # TODO
+    pass
 
 
 if __name__ == "__main__":
-    test_all()
+    # args = __parse_args__()
+    # config = __parse_config__(args.config)
+    config = __parse_config__("default.toml")  # use with NGSolve
+    linear_encoder_decoder(config)

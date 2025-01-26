@@ -1,0 +1,36 @@
+[mesh]
+maxh = 0.1
+
+[data_gen]
+tol = 1e-1
+iterations = 1_000
+is_complex = true
+n_samples = 1_000
+
+[model]
+compression_factor = 2
+init_encoder_type = "glorot_uniform"
+init_decoder_type = "glorot_uniform"
+
+[model.init_encoder_kwargs]
+# Here we can specify the kwargs for the encoder initialization
+
+[model.init_decoder_kwargs]
+# Here we can specify the kwargs for the decoder initialization
+
+[optimization]
+optimizer_type = "adam"
+ord = 2
+reg = 0.1
+
+[optimization.optimizer_kwargs]
+# Here we can specify the kwargs for the optimizer
+learning_rate = 0.001
+
+[training]
+n_epochs = 100
+freq = 10
+
+[output]
+save_weights = true
+plot_weights = true

@@ -189,7 +189,7 @@ class BasicConvDiffDataGen(DataGenerator):
         self.iterations = iterations
         self.is_complex = is_complex
 
-        print(f"Data generator initialized:\n{self}")
+        print(f"\t->Data generator {self.__class__.__name__} initialized.")
 
     def __str__(self):
         desc = (
