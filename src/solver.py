@@ -4,6 +4,7 @@ Linear algebra solvers using JAX
 
 import jax.numpy as jnp
 from jax import jit
+import scipy as sp
 from typing import Tuple
 
 
@@ -113,6 +114,56 @@ def symmetric_gauss_seidel(
         if verbose:
             print(f"Iteration {i}: norm = {jnp.linalg.norm(r)}")
     return x
+
+
+# TODO: Two-level wrapper
+@jit
+def encoder_decoder_tl(
+    fine_operator: jnp.ndarray,
+    coarse_operator: jnp.ndarray,
+    fine_to_coarse: jnp.ndarray,
+    coarse_to_fine: jnp.ndarray,
+    rhs: jnp.ndarray,
+    solver_tol: float = 1e-6,
+    solver_max_iter: int = 1_000,
+    verbose: bool = False,
+) -> jnp.ndarray:
+    """
+    Two-level solver for a linear system Ax = b.
+    We assume b is trivial on boundary dofs.
+    """
+    x_fine = jnp.zeros_like(rhs)
+    x_coarse = jnp.zeros_like(coarse_operator @ rhs)
+    for i in range(int(solver_max_iter)):
+        # Pre-smoothing: forward Gauss-Seidel
+        residual_fine = rhs - fine_operator @ x_fine
+        x_fine = forward_gauss_seidel(
+            fine_operator,
+            x_fine,
+            rhs,
+            tol=solver_tol,
+            max_iter=1,
+            verbose=False,
+        )
+        # Coarse grid correction
+        residual_coarse = fine_to_coarse @ residual_fine
+        x_coarse = sp.linalg.solve(coarse_operator, residual_coarse)
+        x_fine = x_fine + coarse_to_fine @ x_coarse
+        # Post-smoothing: backward Gauss-Seidel
+        residual_fine = rhs - fine_operator @ x_fine
+        x_fine = backward_gauss_seidel(
+            fine_operator,
+            x_fine,
+            rhs,
+            tol=solver_tol,
+            max_iter=1,
+            verbose=False,
+        )
+        if jnp.linalg.norm(residual_fine) < solver_tol:
+            break
+        if verbose:
+            print(f"Iteration {i}: norm = {jnp.linalg.norm(residual_fine)}")
+    return x_fine
 
 
 # Test functions

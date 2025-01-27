@@ -21,7 +21,7 @@ init_decoder_type = "glorot_uniform"
 [optimization]
 optimizer_type = "adam"
 ord = 2
-reg = 0.1
+reg = 0.01
 
 [optimization.optimizer_kwargs]
 # Here we can specify the kwargs for the optimizer
@@ -30,6 +30,17 @@ learning_rate = 0.001
 [training]
 n_epochs = 100
 freq = 10
+
+[solver]
+solver_tol = 1e-6
+solver_max_iter = 1_000
+solver_verbose = true
+
+[coarsening]
+# "dec-dec", "dec-enc", "enc-enc", "enc-dec"
+coarsening_type = "dec-dec"
+use_restricted_operator = false
+regularization = 0.1
 
 [output]
 save_weights = false

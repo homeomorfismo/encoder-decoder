@@ -62,6 +62,8 @@ def __assert_minimal_config__(config: dict) -> None:
         "model",
         "optimization",
         "training",
+        "coarsening",
+        "solver",
         "output",
     ]
     for key in required_keys:
@@ -90,6 +92,12 @@ def linear_encoder_decoder(config: dict) -> None:
     reg = config["optimization"]["reg"]
     n_epochs = config["training"]["n_epochs"]
     freq = config["training"]["freq"]
+    coarsening_type = config["coarsening"]["coarsening_type"]
+    use_restricted_operator = config["coarsening"]["use_restricted_operator"]
+    regularization = config["coarsening"]["regularization"]
+    solver_tol = config["solver"]["solver_tol"]
+    solver_max_iter = config["solver"]["solver_max_iter"]
+    solver_verbose = config["solver"]["solver_verbose"]
     save_weights = config["output"]["save_weights"]
     plot_weights = config["output"]["plot_weights"]
     strict_assert = config["output"]["strict_assert"]
@@ -223,8 +231,107 @@ def linear_encoder_decoder(config: dict) -> None:
         ), f"Error: {error:.10f}, expected less than 1e-1!"
 
     # Test 2: Wrap the encoder-decoder model in a two-level solver
-    # TODO
-    pass
+    fine_operator = conv_diff_dgen.rest_operator
+    if use_restricted_operator:
+        fine_operator_loc = fine_operator
+    else:
+        fine_operator_loc = conv_diff_dgen.operator
+
+    if coarsening_type == "dec-dec":
+        # decoder @ conv_diff_dgen.operator @ decoder.T
+        coarse_operator = jnp.dot(
+            weights_decoder,
+            jnp.dot(fine_operator_loc, weights_decoder.T),
+        )
+        fine_to_coarse = weights_decoder
+        coarse_to_fine = weights_decoder.T
+    elif coarsening_type == "dec-enc":
+        # decoder @ conv_diff_dgen.operator @ encoder
+        coarse_operator = jnp.dot(
+            weights_decoder,
+            jnp.dot(fine_operator_loc, weights_encoder),
+        )
+        fine_to_coarse = weights_decoder
+        coarse_to_fine = weights_encoder
+    elif coarsening_type == "enc-enc":
+        # encoder @ conv_diff_dgen.operator @ encoder.T
+        coarse_operator = jnp.dot(
+            weights_encoder.T,
+            jnp.dot(fine_operator_loc, weights_encoder),
+        )
+        fine_to_coarse = weights_encoder
+        coarse_to_fine = weights_encoder.T
+    elif coarsening_type == "enc-dec":
+        # encoder @ conv_diff_dgen.operator @ decoder.T
+        coarse_operator = jnp.dot(
+            weights_encoder.T,
+            jnp.dot(fine_operator_loc, weights_decoder.T),
+        )
+        fine_to_coarse = weights_encoder
+        coarse_to_fine = weights_decoder.T
+    else:
+        # TODO: Move assert to __assert_minimal_config__
+        raise ValueError(f"Invalid coarsening type: {coarsening_type}")
+
+    if regularization > 0.0:
+        print(
+            f"\n\t-> Regularizing the coarse operator with strength {regularization}"
+        )
+        coarse_operator += regularization * jnp.eye(n_coarse)
+
+    # Call the two-level solver
+    print(
+        "\n->Testing the two-level solver model..."
+        "\n\t-> Solving u(x,y) = x**2 + y**2 - exp(x*y)"
+        "\n\t-> RHS f(x,y) = exp(x*y) * (x**2 + y**2 - 1) + x**2 + y**2 - 4"
+    )
+    rhs_grid_fun = conv_diff_dgen.get_gf(name="rhs")
+    rhs_grid_fun.Set(
+        ng.exp(ng.x * ng.y) * (ng.x**2 + ng.y**2 - 1) + ng.x**2 + ng.y**2 - 4
+    )
+    rhs = jnp.array(rhs_grid_fun.vec.FV().NumPy(), dtype=jax_type).flatten()
+
+    jax_reconstr = slv.encoder_decoder_tl(
+        fine_operator,
+        coarse_operator,
+        fine_to_coarse,
+        coarse_to_fine,
+        rhs,
+        solver_tol=solver_tol,
+        solver_max_iter=solver_max_iter,
+        verbose=solver_verbose,
+    )
+
+    solution = conv_diff_dgen.get_gf(name="TL(x**2 + y**2 - exp(x*y))")
+    solution.vec.FV().NumPy()[:] = jax_reconstr
+
+    # Compute NGSolve L2 error, assert close to zero
+    exact_grid_fun = conv_diff_dgen.get_gf(name="u(x,y)")
+    exact_grid_fun.Set(ng.x**2 + ng.y**2 - ng.exp(ng.x * ng.y))
+
+    ng.Draw(rhs_grid_fun, mesh=square, name="rhs")
+    ng.Draw(exact_grid_fun, mesh=square, name="u(x,y)")
+    ng.Draw(solution, mesh=square, name="TL(x**2 + y**2 - exp(x*y))")
+
+    error = ng.sqrt(
+        ng.Integrate(
+            ng.InnerProduct(
+                solution - exact_grid_fun, solution - exact_grid_fun
+            )
+            * ng.dx,
+            square,
+        )
+    )
+    print(f"\n\t-> L2 error: {error:.10f}")
+    if strict_assert:
+        assert np.isclose(
+            error,
+            0.0,
+            atol=1e-1,
+            rtol=1e-1,
+        ), f"Error: {error:.10f}, expected less than 1e-1!"
+
+    print("\n->Done!")
 
 
 if __name__ == "__main__":
