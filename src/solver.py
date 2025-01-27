@@ -1,3 +1,9 @@
+"""
+Solver module for iterative methods.
+Implements Gauss-Seidel and symmetric Gauss-Seidel methods.
+Using JAX for automatic differentiation and JIT compilation.
+"""
+
 import jax.numpy as jnp
 from jax import jit, lax
 from typing import Tuple, Callable
@@ -13,23 +19,19 @@ def coordinate_descent(
     return x, r
 
 
-@jit
-def forward_substitution(
-    matrix: jnp.ndarray, x: jnp.ndarray, b: jnp.ndarray
+def substitution(
+    matrix: jnp.ndarray, x: jnp.ndarray, b: jnp.ndarray, forward: bool
 ) -> Tuple[jnp.ndarray, jnp.ndarray]:
     r = b - jnp.dot(matrix, x)
-    for i in range(len(x)):
-        x, r = coordinate_descent(matrix, x, r, i)
-    return x, r
+    n = len(x)
+    indices = jnp.arange(n) if forward else jnp.arange(n - 1, -1, -1)
 
+    def body_fun(i, val):
+        x, r = val
+        x, r = coordinate_descent(matrix, x, r, indices[i])
+        return x, r
 
-@jit
-def backward_substitution(
-    matrix: jnp.ndarray, x: jnp.ndarray, b: jnp.ndarray
-) -> Tuple[jnp.ndarray, jnp.ndarray]:
-    r = b - jnp.dot(matrix, x)
-    for i in range(len(x) - 1, -1, -1):
-        x, r = coordinate_descent(matrix, x, r, i)
+    x, r = lax.fori_loop(0, n, body_fun, (x, r))
     return x, r
 
 
@@ -39,14 +41,11 @@ def gauss_seidel_iteration(
     b: jnp.ndarray,
     tol: float,
     max_iter: int,
-    substitution_func: Callable[
-        [jnp.ndarray, jnp.ndarray, jnp.ndarray],
-        Tuple[jnp.ndarray, jnp.ndarray],
-    ],
+    forward: bool,
 ) -> jnp.ndarray:
     def body_fun(val):
         i, x, r = val
-        x, r = substitution_func(matrix, x, b)
+        x, r = substitution(matrix, x, b, forward)
         i += 1
         return i, x, r
 
@@ -69,9 +68,7 @@ def forward_gauss_seidel(
     tol: float = 1e-6,
     max_iter: int = 1_000,
 ) -> jnp.ndarray:
-    return gauss_seidel_iteration(
-        matrix, x, b, tol, max_iter, forward_substitution
-    )
+    return gauss_seidel_iteration(matrix, x, b, tol, max_iter, forward=True)
 
 
 @jit
@@ -82,9 +79,7 @@ def backward_gauss_seidel(
     tol: float = 1e-6,
     max_iter: int = 1_000,
 ) -> jnp.ndarray:
-    return gauss_seidel_iteration(
-        matrix, x, b, tol, max_iter, backward_substitution
-    )
+    return gauss_seidel_iteration(matrix, x, b, tol, max_iter, forward=False)
 
 
 @jit
@@ -97,8 +92,8 @@ def symmetric_gauss_seidel(
 ) -> jnp.ndarray:
     def body_fun(val):
         i, x, r = val
-        x, r = forward_substitution(matrix, x, b)
-        x, r = backward_substitution(matrix, x, b)
+        x, r = substitution(matrix, x, b, forward=True)
+        x, r = substitution(matrix, x, b, forward=False)
         i += 1
         return i, x, r
 
@@ -126,16 +121,16 @@ def encoder_decoder_tl(
     def body_fun(values):
         i, x_fine, x_coarse = values
         # Pre-smoothing: forward Gauss-Seidel
-        residual_fine = rhs - fine_operator @ x_fine
+        residual_fine = rhs - jnp.dot(fine_operator, x_fine)
         x_fine = forward_gauss_seidel(
-            fine_operator, x_fine, rhs, tol=solver_tol, max_iter=1
+            fine_operator, x_fine, residual_fine, tol=solver_tol, max_iter=1
         )
         # Coarse grid correction
-        residual_coarse = fine_to_coarse @ residual_fine
+        residual_coarse = jnp.dot(fine_to_coarse, residual_fine)
         x_coarse = jnp.linalg.solve(coarse_operator, residual_coarse)
-        x_fine = x_fine + coarse_to_fine @ x_coarse
+        x_fine = x_fine + jnp.dot(coarse_to_fine, x_coarse)
         # Post-smoothing: backward Gauss-Seidel
-        residual_fine = rhs - fine_operator @ x_fine
+        residual_fine = rhs - jnp.dot(fine_operator, x_fine)
         x_fine = backward_gauss_seidel(
             fine_operator, x_fine, rhs, tol=solver_tol, max_iter=1
         )
@@ -144,7 +139,7 @@ def encoder_decoder_tl(
 
     def cond_fun(val):
         i, x_fine, _ = val
-        residual_fine = rhs - fine_operator @ x_fine
+        residual_fine = rhs - jnp.dot(fine_operator, x_fine)
         return jnp.logical_and(
             jnp.linalg.norm(residual_fine) >= solver_tol,
             i < solver_max_iter,
