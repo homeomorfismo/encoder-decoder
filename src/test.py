@@ -1,19 +1,17 @@
 """
-Wrappers for testing the encoder-decoder model and the two-level solver models,
-using JAX.
+Test the encoder-decoder and two-level solver models.
 """
 
 import argparse
 import toml
-
 import ngsolve as ng
 import numpy as np
 import scipy as sp
 import plotly.graph_objects as go
 import jax
 import jax.numpy as jnp
-import jax.nn.initializers as jinit
 import optax
+from typing import Tuple, Callable
 
 # local imports
 import utilities as ut  # optimizers, initializers
@@ -22,7 +20,6 @@ from geo2d import make_unit_square
 import loss as fn
 import models as mdl
 import solver as slv
-import sparse as sps
 
 
 def __parse_args__() -> argparse.Namespace:
@@ -238,41 +235,25 @@ def linear_encoder_decoder(config: dict) -> None:
         fine_operator_loc = conv_diff_dgen.operator
 
     if coarsening_type == "dec-dec":
-        # decoder @ conv_diff_dgen.operator @ decoder.T
-        coarse_operator = jnp.dot(
-            weights_decoder,
-            jnp.dot(fine_operator_loc, weights_decoder.T),
-        )
         fine_to_coarse = weights_decoder
         coarse_to_fine = weights_decoder.T
     elif coarsening_type == "dec-enc":
-        # decoder @ conv_diff_dgen.operator @ encoder
-        coarse_operator = jnp.dot(
-            weights_decoder,
-            jnp.dot(fine_operator_loc, weights_encoder),
-        )
         fine_to_coarse = weights_decoder
         coarse_to_fine = weights_encoder
     elif coarsening_type == "enc-enc":
-        # encoder @ conv_diff_dgen.operator @ encoder.T
-        coarse_operator = jnp.dot(
-            weights_encoder.T,
-            jnp.dot(fine_operator_loc, weights_encoder),
-        )
-        fine_to_coarse = weights_encoder
-        coarse_to_fine = weights_encoder.T
+        fine_to_coarse = weights_encoder.T
+        coarse_to_fine = weights_encoder
     elif coarsening_type == "enc-dec":
-        # encoder @ conv_diff_dgen.operator @ decoder.T
-        coarse_operator = jnp.dot(
-            weights_encoder.T,
-            jnp.dot(fine_operator_loc, weights_decoder.T),
-        )
-        fine_to_coarse = weights_encoder
+        fine_to_coarse = weights_encoder.T
         coarse_to_fine = weights_decoder.T
     else:
         # TODO: Move assert to __assert_minimal_config__
         raise ValueError(f"Invalid coarsening type: {coarsening_type}")
 
+    coarse_operator = jnp.dot(
+        fine_to_coarse,
+        jnp.dot(fine_operator_loc, coarse_to_fine),
+    )
     if regularization > 0.0:
         print(
             f"\n\t-> Regularizing the coarse operator with strength {regularization}"
@@ -299,7 +280,6 @@ def linear_encoder_decoder(config: dict) -> None:
         rhs,
         solver_tol=solver_tol,
         solver_max_iter=solver_max_iter,
-        verbose=solver_verbose,
     )
 
     solution = conv_diff_dgen.get_gf(name="TL(x**2 + y**2 - exp(x*y))")

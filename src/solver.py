@@ -159,7 +159,7 @@ def encoder_decoder_tl(
 
     iter_count = 0
     x_fine = jnp.zeros_like(rhs)
-    x_coarse = jnp.zeros(coarse_operator.shape[0])
+    x_coarse = jnp.zeros(coarse_operator.shape[0], dtype=rhs.dtype)
     _, x_fine, _ = lax.while_loop(
         cond_fun, body_fun, (iter_count, x_fine, x_coarse)
     )
