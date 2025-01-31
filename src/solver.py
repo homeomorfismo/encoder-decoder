@@ -8,6 +8,10 @@ import jax.numpy as jnp
 from jax import jit, lax
 from typing import Tuple
 
+# Parameters
+__TOL__: float = 1e-6
+__MAX_ITER__: int = 1_000
+
 
 @jit
 def coordinate_descent(
@@ -123,6 +127,8 @@ def encoder_decoder_tl(
     rhs: jnp.ndarray,
     solver_tol: float = 1e-6,
     solver_max_iter: int = 1_000,
+    smoother_tol: float = 1e-1,
+    smoother_max_iter: int = 5,
 ) -> jnp.ndarray:
     def body_fun(
         values: Tuple[int, jnp.ndarray, jnp.ndarray]
@@ -134,8 +140,8 @@ def encoder_decoder_tl(
             fine_operator,
             x_fine,
             residual_fine,
-            tol=solver_tol,
-            max_iter=1,
+            tol=smoother_tol,
+            max_iter=smoother_max_iter,
         )
         # Coarse grid correction
         residual_coarse = jnp.dot(fine_to_coarse, residual_fine)
@@ -144,7 +150,11 @@ def encoder_decoder_tl(
         # Post-smoothing: backward Gauss-Seidel
         residual_fine = rhs - jnp.dot(fine_operator, x_fine)
         x_fine = backward_gauss_seidel(
-            fine_operator, x_fine, rhs, tol=solver_tol, max_iter=1
+            fine_operator,
+            x_fine,
+            rhs,
+            tol=smoother_tol,
+            max_iter=smoother_max_iter,
         )
         i += 1
         return i, x_fine, x_coarse
@@ -171,27 +181,26 @@ def test_forward_gauss_seidel() -> None:
     matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
     b = jnp.dot(matrix, 2.0 * jnp.ones(2))
     x = jnp.array([1.0, 1.0])  # Initial guess
-    max_iter = 1_000
-    x = forward_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=max_iter)
-    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=1e-1)
+    x = forward_gauss_seidel(matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__)
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
 
 
 def test_backward_gauss_seidel() -> None:
     matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
     b = jnp.dot(matrix, 2.0 * jnp.ones(2))
     x = jnp.array([1.0, 1.0])  # Initial guess
-    max_iter = 1_000
-    x = backward_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=max_iter)
-    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=1e-1)
+    x = backward_gauss_seidel(matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__)
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
 
 
 def test_symmetric_gauss_seidel() -> None:
     matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
     b = jnp.dot(matrix, 2.0 * jnp.ones(2))
     x = jnp.array([1.0, 1.0])  # Initial guess
-    max_iter = 1_000
-    x = symmetric_gauss_seidel(matrix, x, b, tol=1e-6, max_iter=max_iter)
-    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=1e-1)
+    x = symmetric_gauss_seidel(
+        matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__
+    )
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
 
 
 if __name__ == "__main__":
