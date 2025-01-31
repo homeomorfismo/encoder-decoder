@@ -6,7 +6,7 @@ Using JAX for automatic differentiation and JIT compilation.
 
 import jax.numpy as jnp
 from jax import jit, lax
-from typing import Tuple, Callable
+from typing import Tuple
 
 
 @jit

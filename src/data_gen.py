@@ -1,21 +1,21 @@
-"""
-Module that generates data for the PseudoVcycle model.
-"""
-
 from abc import ABC, abstractmethod
-from jax import random
+import jax
 import jax.numpy as jnp
 import numpy as np
 import scipy.sparse as sp
 import ngsolve as ng
 import pickle as pkl
+from typing import Tuple
 
 # local imports
-from solver import coordinate_descent
+import solver as slv
 from geo2d import make_unit_square
 
 # Parameters
-__MAXH__ = 0.1
+__MAXH__: float = 0.2
+__SEED__: int = 42  # Fixed seed for reproducibility
+__LOOP__: int = 10
+__DIM__: int = 3
 
 
 class DataGenerator(ABC):
@@ -113,8 +113,29 @@ class DataGenerator(ABC):
                     pass
         print("\t->All forms assembled.")
 
+    def rnd_shape(
+        self,
+        key: jax.random.PRNGKey,
+        shape: Tuple[int, ...],
+    ) -> Tuple[jax.random.PRNGKey, jnp.ndarray]:
+        """
+        Generate a random array with a given shape.
 
-######################################################################
+        Args:
+            key: jax.random.PRNGKey
+                PRNG key for random number generation.
+            shape: Tuple[int, ...]
+                Shape of the random array.
+
+        Returns:
+            Tuple[jax.random.PRNGKey, jnp.ndarray]
+                New PRNG key and random array.
+        """
+        new_key, sub_key = jax.random.split(key)
+        return new_key, jax.random.uniform(sub_key, shape)
+
+
+# Data generators
 class BasicConvDiffDataGen(DataGenerator):
     """
     Data generator for a basic convection-diffusion problem.
@@ -174,7 +195,7 @@ class BasicConvDiffDataGen(DataGenerator):
                 shape=(a.mat.height, a.mat.width),
             ).todense()
         )
-        self.free_dofs = jnp.array(list(fes.FreeDofs()))
+        self.free_dofs = jnp.array(list(fes.FreeDofs()), dtype=jnp.bool_)
         self.rest_operator = (
             self.operator.at[~self.free_dofs]
             .set(0)
@@ -195,7 +216,6 @@ class BasicConvDiffDataGen(DataGenerator):
         desc = (
             f"Space: {self.space}\n"
             f"Operator shape: {self.operator.shape}\n"
-            # f"Free dofs: {self.free_dofs}\n"
             f"Rest operator shape: {self.rest_operator.shape}\n"
             f"Tolerance: {self.tol}\n"
             f"Iterations: {self.iterations}\n"
@@ -204,50 +224,111 @@ class BasicConvDiffDataGen(DataGenerator):
         return f"{super().__str__()}\n{desc}"
 
     def make_data(self, x: jnp.ndarray) -> jnp.ndarray:
+        """
+        Apply symmetric Gauss-Seidel with prescibed tolerance
+        and maximum number of iterations.
+        """
         z = x.copy()
         b = jnp.dot(self.operator, z)
         ma_x = jnp.ones_like(b)
-        r = b - jnp.dot(self.operator, ma_x)
-
-        for _ in range(self.iterations):
-            for i in range(len(r)):
-                ma_x, r = coordinate_descent(self.operator, ma_x, r, i)
-            for i in range(len(r) - 1, -1, -1):
-                ma_x, r = coordinate_descent(self.operator, ma_x, r, i)
-            if jnp.linalg.norm(r) < self.tol:
-                break
-
+        ma_x = slv.forward_gauss_seidel(
+            self.operator,
+            ma_x,
+            b,
+            tol=self.tol,
+            max_iter=self.iterations,
+        )
+        ma_x = slv.backward_gauss_seidel(
+            self.operator,
+            ma_x,
+            b,
+            tol=self.tol,
+            max_iter=self.iterations,
+        )
         z -= ma_x
         return z / jnp.max(jnp.abs(z))
+
+    def generate_random_samples(
+        self,
+        num_samples: int,
+        key: jax.random.PRNGKey = jax.random.PRNGKey(__SEED__),
+    ) -> Tuple[jax.random.PRNGKey, jnp.ndarray]:
+        gf = ng.GridFunction(self.space)
+        x_data = jnp.zeros(
+            (num_samples, self.operator.shape[0]),
+            dtype=gf.vec.FV().NumPy().dtype,
+        )
+
+        for i in range(num_samples):
+            key, rnd_values = self.rnd_shape(key, gf.vec.FV().NumPy().shape)
+            gf.vec.FV().NumPy()[:] = rnd_values
+            x_data = x_data.at[i].set(self.make_data(gf.vec.FV().NumPy()[:]))
+
+        return key, x_data
+
+    def generate_random_nbc_samples(
+        self,
+        num_samples: int,
+        key: jax.random.PRNGKey = jax.random.PRNGKey(__SEED__),
+    ) -> Tuple[jax.random.PRNGKey, jnp.ndarray]:
+        gf = ng.GridFunction(self.space)
+        x_data = jnp.zeros(
+            (num_samples, self.operator.shape[0]),
+            dtype=gf.vec.FV().NumPy().dtype,
+        )
+
+        for i in range(num_samples):
+            key, rnd_values = self.rnd_shape(key, gf.vec.FV().NumPy().shape)
+            gf.vec.FV().NumPy()[:] = rnd_values
+            gf.vec.FV().NumPy()[self.free_dofs] = 0.0
+            x_data = x_data.at[i].set(self.make_data(gf.vec.FV().NumPy()[:]))
+            x_data[i].at[self.free_dofs].set(0.0)
+
+        return key, x_data
+
+    def generate_sinusoidal_samples(
+        self,
+        num_samples: int,
+        key: jax.random.PRNGKey = jax.random.PRNGKey(__SEED__),
+    ) -> Tuple[jax.random.PRNGKey, jnp.ndarray]:
+        gf = ng.GridFunction(self.space)
+        x_data = jnp.zeros(
+            (num_samples, self.operator.shape[0]),
+            dtype=gf.vec.FV().NumPy().dtype,
+        )
+        for i in range(num_samples):
+            key, alpha = self.rnd_shape(key, ())
+            alpha *= 2.0 * jnp.pi
+            key, beta = self.rnd_shape(key, ())
+            beta *= 2.0 * jnp.pi
+            key, gamma = self.rnd_shape(key, ())
+            key, delta = self.rnd_shape(key, ())
+            gamma = gamma + delta * 1j
+            gf.Set(
+                gamma
+                + (beta + gamma) * ng.sin(alpha * i * ng.x)
+                + (alpha - gamma) * ng.cos(beta * i * ng.y)
+            )
+            x_data = x_data.at[i].set(self.make_data(gf.vec.FV().NumPy()[:]))
+
+        return key, x_data
 
     def generate_samples(
         self,
         num_samples: int,
+        key: jax.random.PRNGKey = jax.random.PRNGKey(__SEED__),
     ) -> jnp.ndarray:
-        key = random.PRNGKey(0)
-        alpha = (
-            random.uniform(key, ()) + 1j * random.uniform(key, ())
-            if self.is_complex
-            else random.uniform(key, ())
+        key, random_samples = self.generate_random_samples(num_samples, key)
+        key, nbc_samples = self.generate_random_nbc_samples(num_samples, key)
+        key, sinusoidal_samples = self.generate_sinusoidal_samples(
+            num_samples, key
         )
-        gf = ng.GridFunction(self.space)
-        x_data = jnp.zeros(
-            (num_samples, self.operator.shape[0]),
-            dtype=jnp.complex64 if self.is_complex else jnp.float32,
-        )
-
-        for i in range(num_samples):
-            gf.vec.FV().NumPy()[:] = np.random.randn(self.space.ndof)
-            x_data = x_data.at[i].set(
-                self.make_data(gf.vec.FV().NumPy() * alpha)
-            )
-
+        x_data = jnp.vstack((random_samples, nbc_samples, sinusoidal_samples))
         return x_data
 
     def save_data_gen(self, path: str):
         kwargs = {
             "mesh": self.space.mesh.ngmesh,
-            # "maxh":
             "tol": self.tol,
             "order": self.space.order,
             "iterations": self.iterations,
@@ -260,6 +341,28 @@ class BasicConvDiffDataGen(DataGenerator):
 
 if __name__ == "__main__":
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=__MAXH__))
-    dgen = BasicConvDiffDataGen(mesh)
-    print(dgen.generate_samples(10))
-    print(dgen.get_gf())
+    dgen = BasicConvDiffDataGen(
+        mesh,
+        tol=1e-1,
+        order=1,
+        iterations=5,
+        is_complex=True,
+        is_dirichlet=True,
+    )
+
+    # rnd_shape test
+    key = jax.random.PRNGKey(__SEED__)
+    for i in range(__LOOP__):
+        key, rnd = dgen.rnd_shape(key, ())
+        print(f"Iteration {i} - Key: {key}, Random Value: {rnd}")
+    input("Press Enter to continue...")
+
+    samples = dgen.generate_samples(10, key)
+    gf = dgen.get_gf()
+
+    print(dgen, samples.shape, samples.dtype, gf)
+
+    for i in range(30):
+        gf.vec.FV().NumPy()[:] = samples[i]
+        ng.Draw(gf)
+        input("Press Enter to continue...")

@@ -250,6 +250,7 @@ def linear_encoder_decoder(config: dict) -> None:
         # TODO: Move assert to __assert_minimal_config__
         raise ValueError(f"Invalid coarsening type: {coarsening_type}")
 
+    print(f"\t-> Coarsening type: {coarsening_type}")
     coarse_operator = jnp.dot(
         fine_to_coarse,
         jnp.dot(fine_operator_loc, coarse_to_fine),
@@ -263,13 +264,11 @@ def linear_encoder_decoder(config: dict) -> None:
     # Call the two-level solver
     print(
         "\n->Testing the two-level solver model..."
-        "\n\t-> Solving u(x,y) = x**2 + y**2 - exp(x*y)"
-        "\n\t-> RHS f(x,y) = exp(x*y) * (x**2 + y**2 - 1) + x**2 + y**2 - 4"
+        "\n\t-> Solving u(x,y) = x * (1 - x) * y * (1 - y)"
+        "\n\t-> RHS f(x,y) = -2( x * (1 - x) + y * (1 - y) )"
     )
     rhs_grid_fun = conv_diff_dgen.get_gf(name="rhs")
-    rhs_grid_fun.Set(
-        ng.exp(ng.x * ng.y) * (ng.x**2 + ng.y**2 - 1) + ng.x**2 + ng.y**2 - 4
-    )
+    rhs_grid_fun.Set(-2 * (ng.x * (1 - ng.x) + ng.y * (1 - ng.y)))
     rhs = jnp.array(rhs_grid_fun.vec.FV().NumPy(), dtype=jax_type).flatten()
 
     jax_reconstr = slv.encoder_decoder_tl(
@@ -282,16 +281,16 @@ def linear_encoder_decoder(config: dict) -> None:
         solver_max_iter=solver_max_iter,
     )
 
-    solution = conv_diff_dgen.get_gf(name="TL(x**2 + y**2 - exp(x*y))")
+    solution = conv_diff_dgen.get_gf(name="TL(x * (1 - x) * y * (1 - y))")
     solution.vec.FV().NumPy()[:] = jax_reconstr
 
     # Compute NGSolve L2 error, assert close to zero
     exact_grid_fun = conv_diff_dgen.get_gf(name="u(x,y)")
-    exact_grid_fun.Set(ng.x**2 + ng.y**2 - ng.exp(ng.x * ng.y))
+    exact_grid_fun.Set(ng.x * (1 - ng.x) * ng.y * (1 - ng.y))
 
     ng.Draw(rhs_grid_fun, mesh=square, name="rhs")
     ng.Draw(exact_grid_fun, mesh=square, name="u(x,y)")
-    ng.Draw(solution, mesh=square, name="TL(x**2 + y**2 - exp(x*y))")
+    ng.Draw(solution, mesh=square, name="TL(x * (1 - x) * y * (1 - y))")
 
     error = ng.sqrt(
         ng.Integrate(
