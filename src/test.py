@@ -94,7 +94,6 @@ def linear_encoder_decoder(config: dict) -> None:
     regularization = config["coarsening"]["regularization"]
     solver_tol = config["solver"]["solver_tol"]
     solver_max_iter = config["solver"]["solver_max_iter"]
-    solver_verbose = config["solver"]["solver_verbose"]
     save_weights = config["output"]["save_weights"]
     plot_weights = config["output"]["plot_weights"]
     strict_assert = config["output"]["strict_assert"]
