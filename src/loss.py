@@ -3,11 +3,12 @@ Implementation of loss functions for encoder-decoder architectures
 using JAX.
 """
 
-import jax
 import jax.numpy as jnp
 from jax import jit
-from enum import Enum
 from typing import Callable, Union
+
+# local imports
+from models import LinearEncoderDecoder, MGLinearEncoderDecoder
 
 
 def get_loss(ord: Union[int, float, str, None]) -> Callable:
@@ -24,7 +25,6 @@ def get_loss(ord: Union[int, float, str, None]) -> Callable:
     @jit
     def loss(
         x: jnp.ndarray,
-        y: jnp.ndarray,
         encoder_weights: jnp.ndarray,
         decoder_weights: jnp.ndarray,
         reg: float,
@@ -34,7 +34,10 @@ def get_loss(ord: Union[int, float, str, None]) -> Callable:
         * MSE loss for reconstruction.
         * Regularization on encoder and decoder weights.
         """
-        reconstr_loss = jnp.mean((x - y) ** 2)
+        reconstr_loss = jnp.mean(
+            (x - LinearEncoderDecoder(x, encoder_weights, decoder_weights))
+            ** 2
+        )
         if ord == 0:
             reg_loss = jnp.sum(jnp.abs(encoder_weights) > 0)
             reg_loss += jnp.sum(jnp.abs(decoder_weights) > 0)
@@ -72,9 +75,9 @@ def get_mg_loss(ord: Union[int, float, str, None]) -> Callable:
     @jit
     def loss_mg(
         x: jnp.ndarray,
-        y: jnp.ndarray,
         encoder_weights: jnp.ndarray,
         decoder_weights: jnp.ndarray,
+        range_weights: jnp.ndarray,
         reg: float,
     ) -> float:
         """
@@ -83,7 +86,14 @@ def get_mg_loss(ord: Union[int, float, str, None]) -> Callable:
         * Regularization on encoder and decoder weights.
         """
         reconstr_loss = jnp.mean(
-            jnp.dot(x - y, jnp.transpose(decoder_weights)) ** 2
+            jnp.dot(
+                x
+                - MGLinearEncoderDecoder(
+                    x, encoder_weights, decoder_weights, range_weights
+                ),
+                jnp.transpose(decoder_weights),
+            )
+            ** 2
         )
         if ord == 0:
             reg_loss = jnp.sum(jnp.abs(encoder_weights) > 0)
@@ -112,9 +122,9 @@ def __test_loss_functions():
     import numpy as np
 
     x = np.random.rand(10, 10)
-    y = np.random.rand(10, 10)
     encoder_weights = np.random.rand(10, 10)
     decoder_weights = np.random.rand(10, 10)
+    range_weights = np.random.rand(10, 10)
     reg = 0.1
 
     ord_list = [0, 1, 2, jnp.inf, -jnp.inf, "fro", "nuc", None]
@@ -123,9 +133,9 @@ def __test_loss_functions():
         loss = get_loss(ord)
         loss_mg = get_mg_loss(ord)
         print(f"Testing loss function with ord={ord}")
-        print(f"Loss: {loss(x, y, encoder_weights, decoder_weights, reg)}")
+        print(f"Loss: {loss(x, encoder_weights, decoder_weights, reg)}")
         print(
-            f"MG Loss: {loss_mg(x, y, encoder_weights, decoder_weights, reg)}"
+            f"MG Loss: {loss_mg(x, encoder_weights, decoder_weights, range_weights, reg)}"
         )
 
 
