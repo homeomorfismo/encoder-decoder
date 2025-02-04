@@ -1,3 +1,7 @@
+"""
+Data generators for different PDE problems.
+"""
+
 from abc import ABC, abstractmethod
 import jax
 import jax.numpy as jnp
@@ -12,10 +16,11 @@ import solver as slv
 from geo2d import make_unit_square
 
 # Parameters
-__MAXH__: float = 0.2
-__SEED__: int = 42  # Fixed seed for reproducibility
+__MAXH__: float = 0.3
+__SEED__: int = 0
 __LOOP__: int = 10
 __DIM__: int = 3
+__NUM_SAMPLES__: int = 16
 
 
 class DataGenerator(ABC):
@@ -149,6 +154,7 @@ class BasicConvDiffDataGen(DataGenerator):
         iterations: int = 1_000,
         is_complex: bool = True,
         is_dirichlet: bool = True,
+        debug: bool = False,
     ):
         """
         Initialize the data generator.
@@ -196,12 +202,8 @@ class BasicConvDiffDataGen(DataGenerator):
             ).todense()
         )
         self.free_dofs = jnp.array(list(fes.FreeDofs()), dtype=jnp.bool_)
-        self.rest_operator = (
-            self.operator.at[~self.free_dofs]
-            .set(0)
-            .at[:, ~self.free_dofs]
-            .set(0)
-        )
+        self.rest_operator = self.operator.at[~self.free_dofs, :].set(0)
+        self.rest_operator = self.rest_operator.at[:, ~self.free_dofs].set(0)
         self.rest_operator = self.rest_operator.at[
             jnp.diag_indices_from(self.rest_operator)
         ].set(self.operator.diagonal())
@@ -209,6 +211,14 @@ class BasicConvDiffDataGen(DataGenerator):
         self.tol = tol
         self.iterations = iterations
         self.is_complex = is_complex
+
+        if debug:
+            print(
+                f"Debugging {self.__class__.__name__} data generator:\n"
+                f"\t->operator:\n{self.operator}\n"
+                f"\t->rest operator:\n{self.rest_operator}\n"
+                f"\t->free dofs: {self.free_dofs}\n"
+            )
 
         print(f"\t->Data generator {self.__class__.__name__} initialized.")
 
@@ -232,14 +242,14 @@ class BasicConvDiffDataGen(DataGenerator):
         b = jnp.dot(self.operator, z)
         ma_x = jnp.ones_like(b)
         ma_x = slv.forward_gauss_seidel(
-            self.operator,
+            self.rest_operator,
             ma_x,
             b,
             tol=self.tol,
             max_iter=self.iterations,
         )
         ma_x = slv.backward_gauss_seidel(
-            self.operator,
+            self.rest_operator,
             ma_x,
             b,
             tol=self.tol,
@@ -282,8 +292,7 @@ class BasicConvDiffDataGen(DataGenerator):
             gf.vec.FV().NumPy()[:] = rnd_values
             gf.vec.FV().NumPy()[self.free_dofs] = 0.0
             x_data = x_data.at[i].set(self.make_data(gf.vec.FV().NumPy()[:]))
-            x_data[i].at[self.free_dofs].set(0.0)
-
+        x_data = x_data.at[:, ~self.free_dofs].set(0.0)
         return key, x_data
 
     def generate_sinusoidal_samples(
@@ -313,17 +322,60 @@ class BasicConvDiffDataGen(DataGenerator):
 
         return key, x_data
 
+    def generate_sinuoidal_samples_nbc(
+        self,
+        num_samples: int,
+        key: jax.random.PRNGKey = jax.random.PRNGKey(__SEED__),
+    ) -> Tuple[jax.random.PRNGKey, jnp.ndarray]:
+        gf = ng.GridFunction(self.space)
+        x_data = jnp.zeros(
+            (num_samples, self.operator.shape[0]),
+            dtype=gf.vec.FV().NumPy().dtype,
+        )
+        for i in range(num_samples):
+            key, alpha = self.rnd_shape(key, ())
+            alpha *= 2.0 * jnp.pi
+            key, beta = self.rnd_shape(key, ())
+            beta *= 2.0 * jnp.pi
+            key, gamma = self.rnd_shape(key, ())
+            key, delta = self.rnd_shape(key, ())
+            gamma = gamma + delta * 1j
+            gf.Set(
+                gamma
+                + (beta + gamma) * ng.sin(alpha * i * ng.x)
+                + (alpha - gamma) * ng.cos(beta * i * ng.y)
+            )
+            gf.vec.FV().NumPy()[self.free_dofs] = 0.0
+            x_data = x_data.at[i].set(self.make_data(gf.vec.FV().NumPy()[:]))
+        x_data = x_data.at[:, ~self.free_dofs].set(0.0)
+
+        return key, x_data
+
     def generate_samples(
         self,
         num_samples: int,
         key: jax.random.PRNGKey = jax.random.PRNGKey(__SEED__),
     ) -> jnp.ndarray:
-        key, random_samples = self.generate_random_samples(num_samples, key)
-        key, nbc_samples = self.generate_random_nbc_samples(num_samples, key)
-        key, sinusoidal_samples = self.generate_sinusoidal_samples(
-            num_samples, key
+        key, random_samples = self.generate_random_samples(
+            num_samples // 4, key
         )
-        x_data = jnp.vstack((random_samples, nbc_samples, sinusoidal_samples))
+        key, nbc_samples = self.generate_random_nbc_samples(
+            num_samples // 4, key
+        )
+        key, sinusoidal_samples = self.generate_sinusoidal_samples(
+            num_samples // 4, key
+        )
+        key, sinusoidal_nbc_samples = self.generate_sinuoidal_samples_nbc(
+            num_samples // 4, key
+        )
+        x_data = jnp.vstack(
+            (
+                random_samples,
+                nbc_samples,
+                sinusoidal_samples,
+                sinusoidal_nbc_samples,
+            )
+        )
         return x_data
 
     def save_data_gen(self, path: str):
@@ -348,6 +400,7 @@ if __name__ == "__main__":
         iterations=5,
         is_complex=True,
         is_dirichlet=True,
+        debug=True,
     )
 
     # rnd_shape test
@@ -357,12 +410,12 @@ if __name__ == "__main__":
         print(f"Iteration {i} - Key: {key}, Random Value: {rnd}")
     input("Press Enter to continue...")
 
-    samples = dgen.generate_samples(10, key)
+    samples = dgen.generate_samples(__NUM_SAMPLES__, key)
     gf = dgen.get_gf()
 
     print(dgen, samples.shape, samples.dtype, gf)
 
-    for i in range(30):
+    for i in range(samples.shape[0]):
         gf.vec.FV().NumPy()[:] = samples[i]
         ng.Draw(gf)
         input("Press Enter to continue...")
