@@ -10,15 +10,19 @@ import tensorflow.keras.datasets.mnist as mnist
 import matplotlib.pyplot as plt
 import numpy as np
 
+from loss import get_loss, get_mg_loss
 from models import LinearEncoderDecoder, MGLinearEncoderDecoder
 import utilities as ut  # optimizers, initializers
 
+__DIM__: int = 10
+__REG__: float = 0.1
 __SEED__: int = 0
 __NUM_EPOCHS__: int = 100
 __BATCH_SIZE__: int = 100
 __LEARNING_RATE__: float = 0.01
 __OPTIMIZER_NAME__: str = "adam"
 __INIT_NAME__: str = "glorot_uniform"
+__ORD_TYPES__: list = [0, 1, 2, jnp.inf, -jnp.inf, "fro", "nuc"]
 
 
 def __get_mnist_data():
@@ -31,6 +35,34 @@ def __get_mnist_data():
     return x_train, x_test
 
 
+# Testing loss.py
+def test_get_loss():
+    """
+    Test all the loss functions.
+    """
+    x = np.random.rand(__DIM__, __DIM__)
+    encoder_weights = np.random.rand(__DIM__, __DIM__)
+    decoder_weights = np.random.rand(__DIM__, __DIM__)
+    range_weights = np.random.rand(__DIM__, __DIM__)
+    for ord in __ORD_TYPES__:
+        loss_fn = get_loss(ord)
+        mg_loss_fn = get_mg_loss(ord)
+        loss_fn_val = loss_fn(x, encoder_weights, decoder_weights, __REG__)
+        mg_loss_fn_val = mg_loss_fn(
+            x,
+            encoder_weights,
+            decoder_weights,
+            range_weights,
+            __REG__,
+        )
+        print(
+            f"\nLoss function with ord={ord}:"
+            f"\nLoss: {loss_fn_val}"
+            f"\nMG Loss: {mg_loss_fn_val}"
+        )
+
+
+# Testing models.py
 def test_linear_encoder_decoder():
     """
     Test the LinearEncoderDecoder function.
@@ -169,3 +201,9 @@ def test_mg_linear_encoder_decoder():
         axes[i, 0].imshow(x_samples[i].reshape(28, 28), cmap="gray")
         axes[i, 1].imshow(y_samples[i].reshape(28, 28), cmap="gray")
     plt.show()
+
+
+if __name__ == "__main__":
+    test_get_loss()
+    test_linear_encoder_decoder()
+    test_mg_linear_encoder_decoder()
