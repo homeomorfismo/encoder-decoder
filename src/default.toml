@@ -2,13 +2,15 @@
 maxh = 0.1
 
 [data_gen]
-tol = 1e-1
-iterations = 1_000
-is_complex = true
-n_samples = 1_000
+tol = 1e-10
+iterations = 5
+is_complex = false
+n_samples = 6_000
+use_restricted_operator = false
 
 [model]
-compression_factor = 2
+compression_factor = 3
+seed = 42
 init_encoder_type = "glorot_uniform"
 init_decoder_type = "glorot_uniform"
 
@@ -17,32 +19,33 @@ init_decoder_type = "glorot_uniform"
 
 [model.init_decoder_kwargs]
 # Here we can specify the kwargs for the decoder initialization
+# value = 0.0
 
 [optimization]
 optimizer_type = "adam"
 ord = 2
-reg = 0.01
+reg = 0.05
 
 [optimization.optimizer_kwargs]
 # Here we can specify the kwargs for the optimizer
-learning_rate = 0.001
+learning_rate = 0.0005
 
 [training]
-n_epochs = 100
+n_epochs = 500
+batch_size = 25
 freq = 10
 
 [solver]
-solver_tol = 1e-6
+solver_tol = 1e-8
 solver_max_iter = 1_000
-solver_verbose = true
 
 [coarsening]
 # "dec-dec", "dec-enc", "enc-enc", "enc-dec"
-coarsening_type = "dec-dec"
+coarsening_type = "enc-enc"
 use_restricted_operator = false
-regularization = 0.1
+regularization = 0
 
 [output]
 save_weights = false
-plot_weights = true
-strict_assert = false
+plot_weights = false
+strict_assert = true

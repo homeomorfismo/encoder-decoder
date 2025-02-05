@@ -18,11 +18,11 @@ __INIT_NAME__: str = "glorot_uniform"
 def __assert_sizes__(
     x: jnp.ndarray, weights: jnp.ndarray, bias: jnp.ndarray
 ) -> None:
-    assert x.ndim == 2, "Input must be 2D"
+    # assert x.ndim == 2, "Input must be 2D"
     assert weights.ndim == 2, "Weights must be 2D"
     assert bias.ndim == 1, "Bias must be 1D"
     assert (
-        x.shape[1] == weights.shape[0]
+        x.shape[-1] == weights.shape[0]
     ), "Input and weights dimensions mismatch"
     assert (
         weights.shape[1] == bias.shape[0]
