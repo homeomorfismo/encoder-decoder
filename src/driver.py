@@ -371,12 +371,17 @@ def linear_encoder_decoder(config: Config) -> None:
     # Call the two-level solver
     print(
         "\n->Testing the two-level solver model..."
+        "\n-> - Lap(u) + u = f in [0,1]^2"
         "\n\t-> Solving u(x,y) = x * (1 - x) * y * (1 - y)"
-        "\n\t-> RHS f(x,y) = -2( x * (1 - x) + y * (1 - y) )"
+        "\n\t-> RHS f(x,y) = 2( x * (1 - x) + y * (1 - y) )"
+        " + u(x,y) in [0,1]^2"
     )
     rhs_grid_fun = conv_diff_dgen.get_gf(name="rhs")
-    rhs_grid_fun.Set(-2 * (ng.x * (1 - ng.x) + ng.y * (1 - ng.y)))
-    rhs = jnp.array(rhs_grid_fun.vec.FV().NumPy(), dtype=jax_type).flatten()
+    rhs_grid_fun.Set(
+        2 * (ng.x * (1 - ng.x) + ng.y * (1 - ng.y))
+        + ng.x * (1 - ng.x) * ng.y * (1 - ng.y)
+    )
+    rhs = jnp.array(rhs_grid_fun.vec.FV().NumPy(), dtype=jax_type)
 
     jax_reconstr = slv.encoder_decoder_tl(
         fine_operator,

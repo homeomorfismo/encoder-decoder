@@ -12,7 +12,6 @@ from typing import Tuple, Union
 
 # local imports
 import solver as slv
-from geo2d import make_unit_square
 
 # Parameters
 __SEED__: int = 0
