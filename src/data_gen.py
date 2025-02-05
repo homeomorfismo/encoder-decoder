@@ -15,12 +15,7 @@ import solver as slv
 from geo2d import make_unit_square
 
 # Parameters
-__MAXH__: float = 0.3
 __SEED__: int = 0
-__LOOP__: int = 10
-__DIM__: int = 3
-__NUM_SAMPLES__: int = 16
-
 __MIN_VAL__: float = -1.0
 __MAX_VAL__: float = 1.0
 
@@ -268,7 +263,7 @@ class BasicConvDiffDataGen(DataGenerator):
             max_iter=self.iterations,
         )
         z -= ma_x
-        return z / jnp.max(jnp.abs(z))
+        return z
 
     def generate_random_samples(
         self,
@@ -285,9 +280,13 @@ class BasicConvDiffDataGen(DataGenerator):
         for i in range(num_samples):
             key, rnd_values = self.rnd_shape(key, gf.vec.FV().NumPy().shape)
             gf.vec.FV().NumPy()[:] = rnd_values
-            x_data = x_data.at[i].set(
-                self.make_data(gf.vec.FV().NumPy()[:], use_rest)
+            gf.vec.FV().NumPy()[:] = self.make_data(
+                gf.vec.FV().NumPy()[:], use_rest
             )
+            norm = ng.sqrt(
+                ng.Integrate(ng.InnerProduct(gf, gf) * ng.dx, gf.space.mesh)
+            )
+            x_data = x_data.at[i].set(gf.vec.FV().NumPy()[:] / norm)
 
         return key, x_data
 
@@ -306,11 +305,15 @@ class BasicConvDiffDataGen(DataGenerator):
         for i in range(num_samples):
             key, rnd_values = self.rnd_shape(key, gf.vec.FV().NumPy().shape)
             gf.vec.FV().NumPy()[:] = rnd_values
-            gf.vec.FV().NumPy()[self.free_dofs] = 0.0
-            x_data = x_data.at[i].set(
-                self.make_data(gf.vec.FV().NumPy()[:], use_rest)
+            gf.vec.FV().NumPy()[~self.free_dofs] = 0.0
+            gf.vec.FV().NumPy()[:] = self.make_data(
+                gf.vec.FV().NumPy()[:], use_rest
             )
-        x_data = x_data.at[:, ~self.free_dofs].set(0.0)
+            gf.vec.FV().NumPy()[~self.free_dofs] = 0.0
+            norm = ng.sqrt(
+                ng.Integrate(ng.InnerProduct(gf, gf) * ng.dx, gf.space.mesh)
+            )
+            x_data = x_data.at[i].set(gf.vec.FV().NumPy()[:] / norm)
         return key, x_data
 
     def generate_sinusoidal_samples(
@@ -337,9 +340,13 @@ class BasicConvDiffDataGen(DataGenerator):
                 + (beta + gamma) * ng.sin(alpha * i * ng.x)
                 + (alpha - gamma) * ng.cos(beta * i * ng.y)
             )
-            x_data = x_data.at[i].set(
-                self.make_data(gf.vec.FV().NumPy()[:], use_rest)
+            gf.vec.FV().NumPy()[:] = self.make_data(
+                gf.vec.FV().NumPy()[:], use_rest
             )
+            norm = ng.sqrt(
+                ng.Integrate(ng.InnerProduct(gf, gf) * ng.dx, gf.space.mesh)
+            )
+            x_data = x_data.at[i].set(gf.vec.FV().NumPy()[:] / norm)
 
         return key, x_data
 
@@ -367,12 +374,15 @@ class BasicConvDiffDataGen(DataGenerator):
                 + (beta + gamma) * ng.sin(alpha * i * ng.x)
                 + (alpha - gamma) * ng.cos(beta * i * ng.y)
             )
-            gf.vec.FV().NumPy()[self.free_dofs] = 0.0
-            x_data = x_data.at[i].set(
-                self.make_data(gf.vec.FV().NumPy()[:], use_rest)
+            gf.vec.FV().NumPy()[~self.free_dofs] = 0.0
+            gf.vec.FV().NumPy()[:] = self.make_data(
+                gf.vec.FV().NumPy()[:], use_rest
             )
-        x_data = x_data.at[:, ~self.free_dofs].set(0.0)
-
+            gf.vec.FV().NumPy()[~self.free_dofs] = 0.0
+            norm = ng.sqrt(
+                ng.Integrate(ng.InnerProduct(gf, gf) * ng.dx, gf.space.mesh)
+            )
+            x_data = x_data.at[i].set(gf.vec.FV().NumPy()[:] / norm)
         return key, x_data
 
     def generate_samples(
