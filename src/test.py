@@ -9,20 +9,32 @@ import jax.lax as lax
 import tensorflow.keras.datasets.mnist as mnist
 import matplotlib.pyplot as plt
 import numpy as np
+import ngsolve as ng
 
+# local imports
+import utilities as ut  # optimizers, initializers
 from loss import get_loss, get_mg_loss
 from models import LinearEncoderDecoder, MGLinearEncoderDecoder
-import utilities as ut  # optimizers, initializers
+from geo2d import make_unit_square
+from data_gen import BasicConvDiffDataGen
 
+# Parameters
 __DIM__: int = 10
 __REG__: float = 0.1
+__ORD_TYPES__: list = [0, 1, 2, jnp.inf, -jnp.inf, "fro", "nuc"]
+
 __SEED__: int = 0
 __NUM_EPOCHS__: int = 100
 __BATCH_SIZE__: int = 100
 __LEARNING_RATE__: float = 0.01
 __OPTIMIZER_NAME__: str = "adam"
 __INIT_NAME__: str = "glorot_uniform"
-__ORD_TYPES__: list = [0, 1, 2, jnp.inf, -jnp.inf, "fro", "nuc"]
+
+__MAXH__: float = 0.1
+__SOLVER_TOL__: float = 1e-1
+__ORDER__: int = 1
+__SOLVER_ITER__: int = 5
+__NUM_SAMPLES__: int = 8
 
 
 def __get_mnist_data():
@@ -203,7 +215,44 @@ def test_mg_linear_encoder_decoder():
     plt.show()
 
 
+# Testing data_gen.py
+def test_basic_conv_diff_data_gen():
+    """
+    Test the BasicConvDiffDataGen function.
+    """
+    mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=__MAXH__))
+    data_gen = BasicConvDiffDataGen(
+        mesh,
+        tol=__SOLVER_TOL__,
+        order=__ORDER__,
+        iterations=__SOLVER_ITER__,
+        is_complex=True,
+        is_dirichlet=True,
+        debug=True,
+    )
+
+    # rnd_shape test
+    key = jax.random.PRNGKey(__SEED__)
+    key, rnd = data_gen.rnd_shape(key, ())
+    print(f"Key: {key}, Rnd: {rnd}")
+
+    # generate_samples test
+    samples_full_op = data_gen.generate_samples(
+        __NUM_SAMPLES__, use_rest=False
+    )
+    samples_rest_op = data_gen.generate_samples(__NUM_SAMPLES__, use_rest=True)
+    gfs = data_gen.get_gf(dim=__NUM_SAMPLES__ * 2)
+
+    for i in range(__NUM_SAMPLES__):
+        gfs.vecs[i].FV().NumPy()[:] = samples_full_op[i]
+        gfs.vecs[i + __NUM_SAMPLES__].FV().NumPy()[:] = samples_rest_op[i]
+
+    ng.Draw(mesh)
+    ng.Draw(gfs)
+
+
 if __name__ == "__main__":
     test_get_loss()
     test_linear_encoder_decoder()
     test_mg_linear_encoder_decoder()
+    test_basic_conv_diff_data_gen()
