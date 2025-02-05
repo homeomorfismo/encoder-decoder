@@ -6,6 +6,7 @@ import jax
 from jax import jit
 import jax.numpy as jnp
 import jax.lax as lax
+import optax
 import tensorflow.keras.datasets.mnist as mnist
 import matplotlib.pyplot as plt
 import numpy as np
@@ -106,9 +107,7 @@ def test_linear_encoder_decoder():
         params, opt_state = carry
         loss, grads = jax.value_and_grad(loss_fn)(params, batch)
         updates, new_opt_state = optimizer.update(grads, opt_state)
-        new_params = jax.tree_util.tree_map(
-            lambda p, u: p + u, params, updates
-        )
+        new_params = optax.apply_updates(params, updates)
         return (new_params, new_opt_state), loss
 
     for epoch in range(__NUM_EPOCHS__):
@@ -178,9 +177,7 @@ def test_mg_linear_encoder_decoder():
         params, opt_state = carry
         loss, grads = jax.value_and_grad(loss_fn)(params, batch)
         updates, new_opt_state = optimizer.update(grads, opt_state)
-        new_params = jax.tree_util.tree_map(
-            lambda p, u: p + u, params, updates
-        )
+        new_params = optax.apply_updates(params, updates)
         return (new_params, new_opt_state), loss
 
     for epoch in range(__NUM_EPOCHS__):
