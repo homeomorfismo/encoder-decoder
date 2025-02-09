@@ -142,8 +142,8 @@ def encoder_decoder_tl(
             max_iter=smoother_max_iter,
         )
         # Coarse grid correction, solve with symmetric Gauss-Seidel
-        x_coarse = jnp.dot(fine_to_coarse, x_fine)
-        r_coarse = jnp.dot(fine_to_coarse, r_fine)
+        x_coarse = jnp.dot(x_fine, fine_to_coarse)
+        r_coarse = jnp.dot(r_fine, fine_to_coarse)
         x_coarse, r_coarse = symmetric_gauss_seidel(
             coarse_operator,
             x_coarse,
@@ -152,7 +152,7 @@ def encoder_decoder_tl(
             max_iter=solver_max_iter,
         )
         # Interpolation
-        x_fine = x_fine + jnp.dot(coarse_to_fine, x_coarse)
+        x_fine = x_fine + jnp.dot(x_coarse, coarse_to_fine)
         r_fine = rhs - jnp.dot(fine_operator, x_fine)
         # Post-smoothing: backward Gauss-Seidel
         x_fine, r_fine = backward_gauss_seidel(
@@ -181,49 +181,3 @@ def encoder_decoder_tl(
         (iter_count, x_fine),
     )
     return x_fine
-
-
-def test_tl_method():
-    """
-    Test a two-level method for a simple 4x4 system.
-    """
-
-    fine_operator = jnp.array(
-        [
-            [2.0, -1.0, 0.0, 0.0],
-            [-1.0, 2.0, -1.0, 0.0],
-            [0.0, -1.0, 2.0, -1.0],
-            [0.0, 0.0, -1.0, 2.0],
-        ]
-    )
-    coarse_to_fine = jnp.array(
-        [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]]
-    )
-    fine_to_coarse = coarse_to_fine.T
-    coarse_operator = jnp.dot(
-        coarse_to_fine.T, jnp.dot(fine_operator, coarse_to_fine)
-    )
-
-    true_solution = jnp.array([1.0, 2.0, 3.0, 4.0])
-    rhs = jnp.dot(fine_operator, true_solution)
-
-    solver_tol = 1e-10
-    solver_max_iter = 10_000
-    smoother_tol = 1e-10
-    smoother_max_iter = 20
-
-    computed_solution = encoder_decoder_tl(
-        fine_operator,
-        coarse_operator,
-        fine_to_coarse,
-        coarse_to_fine,
-        rhs,
-        solver_tol,
-        solver_max_iter,
-        smoother_tol,
-        smoother_max_iter,
-    )
-
-    print("True solution:", true_solution)
-    print("Computed solution:", computed_solution)
-    assert jnp.allclose(true_solution, computed_solution, atol=1e-2)

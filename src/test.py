@@ -296,12 +296,12 @@ def test_tl_method():
             [0.0, 0.0, -1.0, 2.0],
         ]
     )
-    coarse_to_fine = jnp.array(
+    fine_to_coarse = jnp.array(
         [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]]
     )
-    fine_to_coarse = coarse_to_fine.T
+    coarse_to_fine = fine_to_coarse.T
     coarse_operator = jnp.dot(
-        coarse_to_fine.T, jnp.dot(fine_operator, coarse_to_fine)
+        jnp.dot(coarse_to_fine, fine_operator), fine_to_coarse
     )
 
     true_solution = jnp.array([1.0, 2.0, 3.0, 4.0])
