@@ -3,9 +3,9 @@ maxh = 0.1
 
 [data_gen]
 tol = 1e-10
-iterations = 5
+iterations = 50
 is_complex = false
-n_samples = 6_000
+n_samples = 5_000
 use_restricted_operator = false
 
 [model]
@@ -32,18 +32,22 @@ learning_rate = 0.0005
 
 [training]
 n_epochs = 500
-batch_size = 25
+batch_size = 50
 freq = 10
 
 [solver]
-solver_tol = 1e-8
-solver_max_iter = 1_000
+solver_tol = 1e-10
+solver_max_iter = 10_000
+
+[smoother]
+smoother_tol = 1e-10
+smoother_max_iter = 50
 
 [coarsening]
 # "dec-dec", "dec-enc", "enc-enc", "enc-dec"
 coarsening_type = "enc-enc"
-use_restricted_operator = false
-regularization = 0
+use_restricted_operator = true
+regularization = 0.001
 
 [output]
 save_weights = false

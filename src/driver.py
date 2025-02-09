@@ -23,8 +23,8 @@ import models as mdl
 import solver as slv
 
 # parameters
-__STRICT_ATOL__: float = 1e-2
-__STRICT_RTOL__: float = 1e-2
+__STRICT_ATOL__: float = 1e-1
+__STRICT_RTOL__: float = 1e-1
 
 
 @dataclass
@@ -80,6 +80,12 @@ class SolverConfig:
 
 
 @dataclass
+class SmootherConfig:
+    smoother_tol: float
+    smoother_max_iter: int
+
+
+@dataclass
 class OutputConfig:
     save_weights: bool
     plot_weights: bool
@@ -95,6 +101,7 @@ class Config:
     training: TrainingConfig
     coarsening: CoarseningConfig
     solver: SolverConfig
+    smoother: SmootherConfig
     output: OutputConfig
 
 
@@ -130,6 +137,7 @@ def __parse_config__(config_path: str) -> Config:
         training=TrainingConfig(**config_dict["training"]),
         coarsening=CoarseningConfig(**config_dict["coarsening"]),
         solver=SolverConfig(**config_dict["solver"]),
+        smoother=SmootherConfig(**config_dict["smoother"]),
         output=OutputConfig(**config_dict["output"]),
     )
 
@@ -146,6 +154,7 @@ def __assert_minimal_config__(config: dict) -> None:
         "training",
         "coarsening",
         "solver",
+        "smoother",
         "output",
     ]
     for key in required_keys:
@@ -182,6 +191,8 @@ def linear_encoder_decoder(config: Config) -> None:
     regularization = config.coarsening.regularization
     solver_tol = config.solver.solver_tol
     solver_max_iter = config.solver.solver_max_iter
+    smoother_tol = config.smoother.smoother_tol
+    smoother_max_iter = config.smoother.smoother_max_iter
     save_weights = config.output.save_weights
     plot_weights = config.output.plot_weights
     strict_assert = config.output.strict_assert
@@ -341,27 +352,27 @@ def linear_encoder_decoder(config: Config) -> None:
     else:
         fine_operator_loc = conv_diff_dgen.operator
 
-    if coarsening_type == "dec-dec":
-        fine_to_coarse = weights_decoder
-        coarse_to_fine = weights_decoder.T
+    # dec-dec, dec-enc, enc-enc, enc-dec
+    if coarsening_type == "enc-dec":
+        fine_to_coarse = weights_encoder
+        coarse_to_fine = weights_decoder
     elif coarsening_type == "dec-enc":
-        fine_to_coarse = weights_decoder
-        coarse_to_fine = weights_encoder
+        fine_to_coarse = weights_decoder.T
+        coarse_to_fine = weights_encoder.T
     elif coarsening_type == "enc-enc":
         fine_to_coarse = weights_encoder.T
         coarse_to_fine = weights_encoder
-    elif coarsening_type == "enc-dec":
-        fine_to_coarse = weights_encoder.T
-        coarse_to_fine = weights_decoder.T
+    elif coarsening_type == "dec-dec":
+        fine_to_coarse = weights_decoder.T
+        coarse_to_fine = weights_decoder
     else:
-        # TODO: Move assert to __assert_minimal_config__
         raise ValueError(f"Invalid coarsening type: {coarsening_type}")
 
     print(f"\t-> Coarsening type: {coarsening_type}")
     coarse_operator = jnp.dot(
-        fine_to_coarse,
-        jnp.dot(fine_operator_loc, coarse_to_fine),
+        jnp.dot(fine_to_coarse, fine_operator_loc), coarse_to_fine
     )
+
     if regularization > 0.0:
         print(
             f"\n\t-> Regularizing the coarse operator with strength {regularization}"
@@ -386,11 +397,13 @@ def linear_encoder_decoder(config: Config) -> None:
     jax_reconstr = slv.encoder_decoder_tl(
         fine_operator,
         coarse_operator,
-        fine_to_coarse,
-        coarse_to_fine,
+        fine_to_coarse.T,
+        coarse_to_fine.T,
         rhs,
         solver_tol=solver_tol,
         solver_max_iter=solver_max_iter,
+        smoother_tol=smoother_tol,
+        smoother_max_iter=smoother_max_iter,
     )
 
     solution = conv_diff_dgen.get_gf(name="TL(x * (1 - x) * y * (1 - y))")
@@ -418,8 +431,8 @@ def linear_encoder_decoder(config: Config) -> None:
         assert np.isclose(
             error,
             0.0,
-            atol=1e-1,
-            rtol=1e-1,
+            atol=__STRICT_ATOL__,
+            rtol=__STRICT_RTOL__,
         ), f"Error: {error:.10f}, expected less than 1e-1!"
 
     print("\n->Done!")
