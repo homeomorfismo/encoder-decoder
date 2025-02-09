@@ -18,6 +18,11 @@ from loss import get_loss, get_mg_loss
 from models import LinearEncoderDecoder, MGLinearEncoderDecoder
 from geo2d import make_unit_square
 from data_gen import BasicConvDiffDataGen
+from solver import (
+    forward_gauss_seidel,
+    backward_gauss_seidel,
+    symmetric_gauss_seidel,
+)
 
 # Parameters
 __DIM__: int = 10
@@ -36,6 +41,9 @@ __SOLVER_TOL__: float = 1e-1
 __ORDER__: int = 1
 __SOLVER_ITER__: int = 5
 __NUM_SAMPLES__: int = 8
+
+__TOL__: float = 1e-6
+__MAX_ITER__: int = 1_000
 
 
 def __get_mnist_data():
@@ -246,6 +254,33 @@ def test_basic_conv_diff_data_gen():
 
     ng.Draw(mesh)
     ng.Draw(gfs)
+
+
+# Testing solver.py
+def test_forward_gauss_seidel() -> None:
+    matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
+    b = jnp.dot(matrix, 2.0 * jnp.ones(2))
+    x = jnp.array([1.0, 1.0])  # Initial guess
+    x = forward_gauss_seidel(matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__)
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
+
+
+def test_backward_gauss_seidel() -> None:
+    matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
+    b = jnp.dot(matrix, 2.0 * jnp.ones(2))
+    x = jnp.array([1.0, 1.0])  # Initial guess
+    x = backward_gauss_seidel(matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__)
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
+
+
+def test_symmetric_gauss_seidel() -> None:
+    matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
+    b = jnp.dot(matrix, 2.0 * jnp.ones(2))
+    x = jnp.array([1.0, 1.0])  # Initial guess
+    x = symmetric_gauss_seidel(
+        matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__
+    )
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
 
 
 if __name__ == "__main__":
