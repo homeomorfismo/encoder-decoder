@@ -7,13 +7,6 @@ import jax
 import jax.numpy as jnp
 from jax import random, jit
 
-# Parameters
-__SEED__: int = 0
-__NUM_EPOCHS__: int = 100
-__BATCH_SIZE__: int = 100
-__LEARNING_RATE__: float = 0.01
-__INIT_NAME__: str = "glorot_uniform"
-
 
 def __assert_sizes__(
     x: jnp.ndarray, weights: jnp.ndarray, bias: jnp.ndarray

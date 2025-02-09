@@ -48,7 +48,7 @@ def gauss_seidel_iteration(
     tol: float,
     max_iter: int,
     forward: bool,
-) -> jnp.ndarray:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     def body_fun(
         val: Tuple[int, jnp.ndarray, jnp.ndarray]
     ) -> Tuple[int, jnp.ndarray, jnp.ndarray]:
@@ -64,8 +64,8 @@ def gauss_seidel_iteration(
     iter_count = 0
     x = jnp.zeros_like(b)
     r = b - jnp.dot(matrix, x)
-    _, x, _ = lax.while_loop(cond_fun, body_fun, (iter_count, x, r))
-    return x
+    _, x, r = lax.while_loop(cond_fun, body_fun, (iter_count, x, r))
+    return x, r
 
 
 @jit
@@ -75,7 +75,7 @@ def forward_gauss_seidel(
     b: jnp.ndarray,
     tol: float = 1e-6,
     max_iter: int = 1_000,
-) -> jnp.ndarray:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     return gauss_seidel_iteration(matrix, x, b, tol, max_iter, forward=True)
 
 
@@ -86,7 +86,7 @@ def backward_gauss_seidel(
     b: jnp.ndarray,
     tol: float = 1e-6,
     max_iter: int = 1_000,
-) -> jnp.ndarray:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     return gauss_seidel_iteration(matrix, x, b, tol, max_iter, forward=False)
 
 
@@ -97,7 +97,7 @@ def symmetric_gauss_seidel(
     b: jnp.ndarray,
     tol: float = 1e-6,
     max_iter: int = 1_000,
-) -> jnp.ndarray:
+) -> Tuple[jnp.ndarray, jnp.ndarray]:
     def body_fun(
         val: Tuple[int, jnp.ndarray, jnp.ndarray]
     ) -> Tuple[int, jnp.ndarray, jnp.ndarray]:
@@ -114,8 +114,8 @@ def symmetric_gauss_seidel(
     iter_count = 0
     x = jnp.zeros_like(b)
     r = b - jnp.dot(matrix, x)
-    _, x, _ = lax.while_loop(cond_fun, body_fun, (iter_count, x, r))
-    return x
+    _, x, r = lax.while_loop(cond_fun, body_fun, (iter_count, x, r))
+    return x, r
 
 
 @jit
@@ -125,31 +125,37 @@ def encoder_decoder_tl(
     fine_to_coarse: jnp.ndarray,
     coarse_to_fine: jnp.ndarray,
     rhs: jnp.ndarray,
-    solver_tol: float = 1e-6,
+    solver_tol: float = 1e-10,
     solver_max_iter: int = 1_000,
     smoother_tol: float = 1e-1,
     smoother_max_iter: int = 5,
 ) -> jnp.ndarray:
-    def body_fun(
-        values: Tuple[int, jnp.ndarray, jnp.ndarray]
-    ) -> Tuple[int, jnp.ndarray, jnp.ndarray]:
-        i, x_fine, x_coarse = values
+    def body_fun(values: Tuple[int, jnp.ndarray]) -> Tuple[int, jnp.ndarray]:
+        i, x_fine = values
+        r_fine = rhs - jnp.dot(fine_operator, x_fine)
         # Pre-smoothing: forward Gauss-Seidel
-        residual_fine = rhs - jnp.dot(fine_operator, x_fine)
-        x_fine = forward_gauss_seidel(
+        x_fine, r_fine = forward_gauss_seidel(
             fine_operator,
             x_fine,
-            residual_fine,
+            r_fine,
             tol=smoother_tol,
             max_iter=smoother_max_iter,
         )
-        # Coarse grid correction
-        residual_coarse = jnp.dot(fine_to_coarse, residual_fine)
-        x_coarse = jnp.linalg.solve(coarse_operator, residual_coarse)
+        # Coarse grid correction, solve with symmetric Gauss-Seidel
+        x_coarse = jnp.dot(fine_to_coarse, x_fine)
+        r_coarse = jnp.dot(fine_to_coarse, r_fine)
+        x_coarse, r_coarse = symmetric_gauss_seidel(
+            coarse_operator,
+            x_coarse,
+            r_coarse,
+            tol=solver_tol,
+            max_iter=solver_max_iter,
+        )
+        # Interpolation
         x_fine = x_fine + jnp.dot(coarse_to_fine, x_coarse)
+        r_fine = rhs - jnp.dot(fine_operator, x_fine)
         # Post-smoothing: backward Gauss-Seidel
-        residual_fine = rhs - jnp.dot(fine_operator, x_fine)
-        x_fine = backward_gauss_seidel(
+        x_fine, r_fine = backward_gauss_seidel(
             fine_operator,
             x_fine,
             rhs,
@@ -157,10 +163,10 @@ def encoder_decoder_tl(
             max_iter=smoother_max_iter,
         )
         i += 1
-        return i, x_fine, x_coarse
+        return i, x_fine
 
-    def cond_fun(val: Tuple[int, jnp.ndarray, jnp.ndarray]) -> bool:
-        i, x_fine, _ = val
+    def cond_fun(val: Tuple[int, jnp.ndarray]) -> bool:
+        i, x_fine = val
         residual_fine = rhs - jnp.dot(fine_operator, x_fine)
         return jnp.logical_and(
             jnp.linalg.norm(residual_fine) >= solver_tol,
@@ -169,8 +175,55 @@ def encoder_decoder_tl(
 
     iter_count = 0
     x_fine = jnp.zeros_like(rhs)
-    x_coarse = jnp.zeros(coarse_operator.shape[0], dtype=rhs.dtype)
-    _, x_fine, _ = lax.while_loop(
-        cond_fun, body_fun, (iter_count, x_fine, x_coarse)
+    _, x_fine = lax.while_loop(
+        cond_fun,
+        body_fun,
+        (iter_count, x_fine),
     )
     return x_fine
+
+
+def test_tl_method():
+    """
+    Test a two-level method for a simple 4x4 system.
+    """
+
+    fine_operator = jnp.array(
+        [
+            [2.0, -1.0, 0.0, 0.0],
+            [-1.0, 2.0, -1.0, 0.0],
+            [0.0, -1.0, 2.0, -1.0],
+            [0.0, 0.0, -1.0, 2.0],
+        ]
+    )
+    coarse_to_fine = jnp.array(
+        [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]]
+    )
+    fine_to_coarse = coarse_to_fine.T
+    coarse_operator = jnp.dot(
+        coarse_to_fine.T, jnp.dot(fine_operator, coarse_to_fine)
+    )
+
+    true_solution = jnp.array([1.0, 2.0, 3.0, 4.0])
+    rhs = jnp.dot(fine_operator, true_solution)
+
+    solver_tol = 1e-10
+    solver_max_iter = 10_000
+    smoother_tol = 1e-10
+    smoother_max_iter = 20
+
+    computed_solution = encoder_decoder_tl(
+        fine_operator,
+        coarse_operator,
+        fine_to_coarse,
+        coarse_to_fine,
+        rhs,
+        solver_tol,
+        solver_max_iter,
+        smoother_tol,
+        smoother_max_iter,
+    )
+
+    print("True solution:", true_solution)
+    print("Computed solution:", computed_solution)
+    assert jnp.allclose(true_solution, computed_solution, atol=1e-2)

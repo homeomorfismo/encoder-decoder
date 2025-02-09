@@ -1,5 +1,6 @@
 """
 Testing module for the encoder-decoder architecture.
+Use pytest to run the tests.
 """
 
 import jax
@@ -14,15 +15,11 @@ import ngsolve as ng
 
 # local imports
 import utilities as ut  # optimizers, initializers
-from loss import get_loss, get_mg_loss
-from models import LinearEncoderDecoder, MGLinearEncoderDecoder
+import loss as fn
+import models as md
+import data_gen as dg
+import solver as slv
 from geo2d import make_unit_square
-from data_gen import BasicConvDiffDataGen
-from solver import (
-    forward_gauss_seidel,
-    backward_gauss_seidel,
-    symmetric_gauss_seidel,
-)
 
 # Parameters
 __DIM__: int = 10
@@ -37,13 +34,14 @@ __OPTIMIZER_NAME__: str = "adam"
 __INIT_NAME__: str = "glorot_uniform"
 
 __MAXH__: float = 0.1
-__SOLVER_TOL__: float = 1e-1
 __ORDER__: int = 1
-__SOLVER_ITER__: int = 5
+__SOLVER_TOL__: float = 1e-10
+__SOLVER_ITER__: int = 10_000
+__SMOOTHER_TOL__: float = 1e-10
+__SMOOTHER_ITER__: int = 50
 __NUM_SAMPLES__: int = 8
 
-__TOL__: float = 1e-6
-__MAX_ITER__: int = 1_000
+__ASSERT_TOL__: float = 1e-5
 
 
 def __get_mnist_data():
@@ -66,8 +64,8 @@ def test_get_loss():
     decoder_weights = np.random.rand(__DIM__, __DIM__)
     range_weights = np.random.rand(__DIM__, __DIM__)
     for ord in __ORD_TYPES__:
-        loss_fn = get_loss(ord)
-        mg_loss_fn = get_mg_loss(ord)
+        loss_fn = fn.get_loss(ord)
+        mg_loss_fn = fn.get_mg_loss(ord)
         loss_fn_val = loss_fn(x, encoder_weights, decoder_weights, __REG__)
         mg_loss_fn_val = mg_loss_fn(
             x,
@@ -108,7 +106,9 @@ def test_linear_encoder_decoder():
 
     # TODO: Replace with personalized loss function
     def loss_fn(params, x):
-        return 0.5 * jnp.mean(jnp.square(x - LinearEncoderDecoder(x, *params)))
+        return 0.5 * jnp.mean(
+            jnp.square(x - md.LinearEncoderDecoder(x, *params))
+        )
 
     @jit
     def update_step(carry, batch):
@@ -141,7 +141,7 @@ def test_linear_encoder_decoder():
     n_samples = 5
     indices = np.random.choice(x_test.shape[0], n_samples)
     x_samples = x_test[indices]
-    y_samples = LinearEncoderDecoder(x_samples, *params)
+    y_samples = md.LinearEncoderDecoder(x_samples, *params)
 
     fig, axes = plt.subplots(n_samples, 2, figsize=(10, 10))
     for i in range(n_samples):
@@ -177,7 +177,7 @@ def test_mg_linear_encoder_decoder():
     # TODO: Replace with personalized loss function
     def loss_fn(params, x):
         return 0.5 * jnp.mean(
-            jnp.square(x - MGLinearEncoderDecoder(x, *params, id_matrix))
+            jnp.square(x - md.MGLinearEncoderDecoder(x, *params, id_matrix))
         )
 
     @jit
@@ -211,7 +211,7 @@ def test_mg_linear_encoder_decoder():
     n_samples = 5
     indices = np.random.choice(x_test.shape[0], n_samples)
     x_samples = x_test[indices]
-    y_samples = MGLinearEncoderDecoder(x_samples, *params, id_matrix)
+    y_samples = md.MGLinearEncoderDecoder(x_samples, *params, id_matrix)
 
     fig, axes = plt.subplots(n_samples, 2, figsize=(10, 10))
     for i in range(n_samples):
@@ -226,11 +226,11 @@ def test_basic_conv_diff_data_gen():
     Test the BasicConvDiffDataGen function.
     """
     mesh = ng.Mesh(make_unit_square().GenerateMesh(maxh=__MAXH__))
-    data_gen = BasicConvDiffDataGen(
+    data_gen = dg.BasicConvDiffDataGen(
         mesh,
-        tol=__SOLVER_TOL__,
+        tol=__SMOOTHER_TOL__,
         order=__ORDER__,
-        iterations=__SOLVER_ITER__,
+        iterations=__SMOOTHER_ITER__,
         is_complex=True,
         is_dirichlet=True,
         debug=True,
@@ -261,30 +261,61 @@ def test_forward_gauss_seidel() -> None:
     matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
     b = jnp.dot(matrix, 2.0 * jnp.ones(2))
     x = jnp.array([1.0, 1.0])  # Initial guess
-    x = forward_gauss_seidel(matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__)
-    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
+    x, _ = slv.forward_gauss_seidel(
+        matrix, x, b, tol=__SOLVER_TOL__, max_iter=__SOLVER_ITER__
+    )
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__ASSERT_TOL__)
 
 
 def test_backward_gauss_seidel() -> None:
     matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
     b = jnp.dot(matrix, 2.0 * jnp.ones(2))
     x = jnp.array([1.0, 1.0])  # Initial guess
-    x = backward_gauss_seidel(matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__)
-    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
+    x, _ = slv.backward_gauss_seidel(
+        matrix, x, b, tol=__SOLVER_TOL__, max_iter=__SOLVER_ITER__
+    )
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__ASSERT_TOL__)
 
 
 def test_symmetric_gauss_seidel() -> None:
     matrix = jnp.array([[4.0, 1.0], [1.0, 3.0]])
     b = jnp.dot(matrix, 2.0 * jnp.ones(2))
     x = jnp.array([1.0, 1.0])  # Initial guess
-    x = symmetric_gauss_seidel(
-        matrix, x, b, tol=__TOL__, max_iter=__MAX_ITER__
+    x, _ = slv.symmetric_gauss_seidel(
+        matrix, x, b, tol=__SOLVER_TOL__, max_iter=__SOLVER_ITER__
     )
-    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__TOL__)
+    assert jnp.allclose(x, 2.0 * jnp.ones(2), atol=__ASSERT_TOL__)
 
 
-if __name__ == "__main__":
-    test_get_loss()
-    test_linear_encoder_decoder()
-    test_mg_linear_encoder_decoder()
-    test_basic_conv_diff_data_gen()
+def test_tl_method():
+    fine_operator = jnp.array(
+        [
+            [2.0, -1.0, 0.0, 0.0],
+            [-1.0, 2.0, -1.0, 0.0],
+            [0.0, -1.0, 2.0, -1.0],
+            [0.0, 0.0, -1.0, 2.0],
+        ]
+    )
+    coarse_to_fine = jnp.array(
+        [[1.0, 0.0], [0.0, 1.0], [1.0, 0.0], [0.0, 1.0]]
+    )
+    fine_to_coarse = coarse_to_fine.T
+    coarse_operator = jnp.dot(
+        coarse_to_fine.T, jnp.dot(fine_operator, coarse_to_fine)
+    )
+
+    true_solution = jnp.array([1.0, 2.0, 3.0, 4.0])
+    rhs = jnp.dot(fine_operator, true_solution)
+
+    computed_solution = slv.encoder_decoder_tl(
+        fine_operator,
+        coarse_operator,
+        fine_to_coarse,
+        coarse_to_fine,
+        rhs,
+        __SOLVER_TOL__,
+        __SOLVER_ITER__,
+        __SMOOTHER_TOL__,
+        __SMOOTHER_ITER__,
+    )
+    assert jnp.allclose(true_solution, computed_solution, atol=__ASSERT_TOL__)

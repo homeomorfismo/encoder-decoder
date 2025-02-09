@@ -247,14 +247,7 @@ class BasicConvDiffDataGen(DataGenerator):
         z = x.copy()
         b = jnp.dot(self.operator, z)
         ma_x = jnp.ones_like(b)
-        ma_x = slv.forward_gauss_seidel(
-            self.rest_operator if use_rest else self.operator,
-            ma_x,
-            b,
-            tol=self.tol,
-            max_iter=self.iterations,
-        )
-        ma_x = slv.backward_gauss_seidel(
+        ma_x, _ = slv.symmetric_gauss_seidel(
             self.rest_operator if use_rest else self.operator,
             ma_x,
             b,
