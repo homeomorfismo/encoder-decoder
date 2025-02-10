@@ -41,7 +41,7 @@ __SMOOTHER_TOL__: float = 1e-10
 __SMOOTHER_ITER__: int = 50
 __NUM_SAMPLES__: int = 8
 
-__ASSERT_TOL__: float = 1e-5
+__ASSERT_TOL__: float = 1e-10
 
 
 def __get_mnist_data():
@@ -305,6 +305,7 @@ def test_tl_method():
     )
 
     true_solution = jnp.array([1.0, 2.0, 3.0, 4.0])
+    computed_solution = jnp.array(np.random.rand(4))
     rhs = jnp.dot(fine_operator, true_solution)
 
     computed_solution = slv.encoder_decoder_tl(
@@ -312,10 +313,11 @@ def test_tl_method():
         coarse_operator,
         fine_to_coarse,
         coarse_to_fine,
+        computed_solution,
         rhs,
-        __SOLVER_TOL__,
-        __SOLVER_ITER__,
-        __SMOOTHER_TOL__,
-        __SMOOTHER_ITER__,
+        solver_tol=__SOLVER_TOL__,
+        solver_max_iter=__SOLVER_ITER__,
+        smoother_tol=__SMOOTHER_TOL__,
+        smoother_max_iter=__SMOOTHER_ITER__,
     )
     assert jnp.allclose(true_solution, computed_solution, atol=__ASSERT_TOL__)

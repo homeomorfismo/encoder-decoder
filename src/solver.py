@@ -62,7 +62,6 @@ def gauss_seidel_iteration(
         return jnp.logical_and(jnp.linalg.norm(r) >= tol, i < max_iter)
 
     iter_count = 0
-    x = jnp.zeros_like(b)
     r = b - jnp.dot(matrix, x)
     _, x, r = lax.while_loop(cond_fun, body_fun, (iter_count, x, r))
     return x, r
@@ -112,7 +111,6 @@ def symmetric_gauss_seidel(
         return jnp.logical_and(jnp.linalg.norm(r) >= tol, i < max_iter)
 
     iter_count = 0
-    x = jnp.zeros_like(b)
     r = b - jnp.dot(matrix, x)
     _, x, r = lax.while_loop(cond_fun, body_fun, (iter_count, x, r))
     return x, r
@@ -124,6 +122,7 @@ def encoder_decoder_tl(
     coarse_operator: jnp.ndarray,
     fine_to_coarse: jnp.ndarray,
     coarse_to_fine: jnp.ndarray,
+    x_fine: jnp.ndarray,
     rhs: jnp.ndarray,
     solver_tol: float = 1e-10,
     solver_max_iter: int = 1_000,
@@ -174,7 +173,6 @@ def encoder_decoder_tl(
         )
 
     iter_count = 0
-    x_fine = jnp.zeros_like(rhs)
     _, x_fine = lax.while_loop(
         cond_fun,
         body_fun,
