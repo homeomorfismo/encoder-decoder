@@ -131,37 +131,43 @@ def encoder_decoder_tl(
 ) -> jnp.ndarray:
     def body_fun(values: Tuple[int, jnp.ndarray]) -> Tuple[int, jnp.ndarray]:
         i, x_fine = values
-        r_fine = rhs - jnp.dot(fine_operator, x_fine)
+        i += 1
         # Pre-smoothing: forward Gauss-Seidel
-        x_fine, r_fine = forward_gauss_seidel(
+        r_fine = rhs - jnp.dot(fine_operator, x_fine)
+        e_fine = jnp.zeros_like(x_fine)
+        e_fine, _ = forward_gauss_seidel(
             fine_operator,
-            x_fine,
+            e_fine,
             r_fine,
             tol=smoother_tol,
             max_iter=smoother_max_iter,
         )
+        x_fine = x_fine + e_fine
+        r_fine = rhs - jnp.dot(fine_operator, x_fine)
         # Coarse grid correction, solve with symmetric Gauss-Seidel
-        x_coarse = jnp.dot(x_fine, fine_to_coarse)
         r_coarse = jnp.dot(r_fine, fine_to_coarse)
-        x_coarse, r_coarse = symmetric_gauss_seidel(
+        e_coarse = jnp.zeros_like(r_coarse)
+        e_coarse, _ = symmetric_gauss_seidel(
             coarse_operator,
-            x_coarse,
+            e_coarse,
             r_coarse,
             tol=solver_tol,
             max_iter=solver_max_iter,
         )
-        # Interpolation
-        x_fine = x_fine + jnp.dot(x_coarse, coarse_to_fine)
+        e_fine = jnp.dot(e_coarse, coarse_to_fine)
+        x_fine = x_fine + e_fine
         r_fine = rhs - jnp.dot(fine_operator, x_fine)
         # Post-smoothing: backward Gauss-Seidel
-        x_fine, r_fine = backward_gauss_seidel(
+        r_fine = rhs - jnp.dot(fine_operator, x_fine)
+        e_fine = jnp.zeros_like(x_fine)
+        e_fine, r_fine = backward_gauss_seidel(
             fine_operator,
-            x_fine,
-            rhs,
+            e_fine,
+            r_fine,
             tol=smoother_tol,
             max_iter=smoother_max_iter,
         )
-        i += 1
+        x_fine = x_fine + e_fine
         return i, x_fine
 
     def cond_fun(val: Tuple[int, jnp.ndarray]) -> bool:
