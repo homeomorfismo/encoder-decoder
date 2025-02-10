@@ -181,6 +181,7 @@ class BasicConvDiffDataGen(DataGenerator):
     def __init__(
         self,
         mesh: ng.Mesh,
+        # coeffs: Tuple[ng.CoefficientFunction, ng.CoefficientFunction, ng.CoefficientFunction],
         tol: float = 1e-3,
         order: int = 1,
         iterations: int = 1_000,
@@ -205,6 +206,8 @@ class BasicConvDiffDataGen(DataGenerator):
                 Flag for Dirichlet boundary conditions.
         """
         super().__init__()
+        # TODO: Implement the coefficients
+        # matrix_coeff, vector_coeff, scalar_coeff = coeffs
         matrix_coeff = ng.CF((1.0, 0.0, 0.0, 1.0), dims=(2, 2))
         vector_coeff = ng.CF((0.0, 0.0))
         scalar_coeff = ng.CF(1.0)

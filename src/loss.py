@@ -91,7 +91,7 @@ def get_mg_loss(ord: Union[int, float, str, None]) -> Callable:
                 - MGLinearEncoderDecoder(
                     x, encoder_weights, decoder_weights, range_weights
                 ),
-                jnp.transpose(decoder_weights),
+                decoder_weights.T,
             )
             ** 2
         )

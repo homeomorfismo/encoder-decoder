@@ -93,12 +93,3 @@ def get_initializer(initializer_type: str, *args, **kwargs) -> Callable:
     if init_func is None:
         raise ValueError(f"Initializer '{initializer_type}' not found.")
     return init_func(*args, **kwargs)
-
-
-# Example usage
-if __name__ == "__main__":
-    optimizer = get_optimizer("adam", learning_rate=0.001)
-    print(optimizer)
-
-    initializer = get_initializer("glorot_normal")
-    print(initializer)

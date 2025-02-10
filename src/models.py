@@ -71,9 +71,5 @@ def MGLinearEncoderDecoder(
         decoder_weights,
         jnp.zeros(decoder_weights.shape[1], dtype=x.dtype),
     )
-    range_x = LinearLayer(
-        fine_x,
-        range_weights,
-        jnp.zeros(range_weights.shape[1], dtype=x.dtype),
-    )
+    range_x = jnp.dot(fine_x, range_weights.T)
     return range_x

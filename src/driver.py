@@ -280,8 +280,8 @@ def linear_encoder_decoder(config: Config) -> None:
         print("\n->Saving the encoder-decoder weights...")
         weights_encoder = jax.device_get(weights_encoder)
         weights_decoder = jax.device_get(weights_decoder)
-        np.save("weights_encoder.npy", weights_encoder)
-        np.save("weights_decoder.npy", weights_decoder)
+        np.save("weights_encoder_ed.npy", weights_encoder)
+        np.save("weights_decoder_ed.npy", weights_decoder)
 
     # Plot heatmaps of the sparsity patterns of the weights
     if plot_weights:
