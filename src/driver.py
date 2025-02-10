@@ -2,8 +2,6 @@
 Driver script for testing the encoder-decoder and two-level solver models.
 """
 
-import argparse
-import toml
 import ngsolve as ng
 import numpy as np
 import plotly.graph_objects as go
@@ -11,8 +9,6 @@ import jax
 import jax.numpy as jnp
 import optax
 import tqdm
-from dataclasses import dataclass
-from typing import Any, Dict
 
 # local imports
 import utilities as ut  # optimizers, initializers
@@ -21,149 +17,14 @@ from geo2d import make_unit_square
 import loss as fn
 import models as mdl
 import solver as slv
+import parser as prs
 
 # parameters
 __STRICT_ATOL__: float = 1e-1
 __STRICT_RTOL__: float = 1e-1
 
 
-@dataclass
-class MeshConfig:
-    maxh: float
-
-
-@dataclass
-class DataGenConfig:
-    tol: float
-    iterations: int
-    is_complex: bool
-    n_samples: int
-    use_restricted_operator: bool
-
-
-@dataclass
-class ModelConfig:
-    compression_factor: float
-    seed: int
-    init_encoder_type: str
-    init_decoder_type: str
-    init_encoder_kwargs: Dict[str, Any]
-    init_decoder_kwargs: Dict[str, Any]
-
-
-@dataclass
-class OptimizationConfig:
-    optimizer_type: str
-    optimizer_kwargs: Dict[str, Any]
-    ord: int
-    reg: float
-
-
-@dataclass
-class TrainingConfig:
-    n_epochs: int
-    freq: int
-    batch_size: int
-
-
-@dataclass
-class CoarseningConfig:
-    coarsening_type: str
-    use_restricted_operator: bool
-    regularization: float
-
-
-@dataclass
-class SolverConfig:
-    solver_tol: float
-    solver_max_iter: int
-
-
-@dataclass
-class SmootherConfig:
-    smoother_tol: float
-    smoother_max_iter: int
-
-
-@dataclass
-class OutputConfig:
-    save_weights: bool
-    plot_weights: bool
-    strict_assert: bool
-    use_progress_bar: bool
-
-
-@dataclass
-class Config:
-    mesh: MeshConfig
-    data_gen: DataGenConfig
-    model: ModelConfig
-    optimization: OptimizationConfig
-    training: TrainingConfig
-    coarsening: CoarseningConfig
-    solver: SolverConfig
-    smoother: SmootherConfig
-    output: OutputConfig
-
-
-def __parse_args__() -> argparse.Namespace:
-    """
-    Parse command-line arguments.
-    """
-    parser = argparse.ArgumentParser(
-        description="Test the encoder-decoder and two-level solver models."
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        required=True,
-        help="Path to the TOML configuration file.",
-    )
-    args = parser.parse_args()
-    return args
-
-
-def __parse_config__(config_path: str) -> Config:
-    """
-    Parse the TOML configuration file.
-    """
-    with open(config_path, "r") as f:
-        config_dict = toml.load(f)
-    __assert_minimal_config__(config_dict)
-    return Config(
-        mesh=MeshConfig(**config_dict["mesh"]),
-        data_gen=DataGenConfig(**config_dict["data_gen"]),
-        model=ModelConfig(**config_dict["model"]),
-        optimization=OptimizationConfig(**config_dict["optimization"]),
-        training=TrainingConfig(**config_dict["training"]),
-        coarsening=CoarseningConfig(**config_dict["coarsening"]),
-        solver=SolverConfig(**config_dict["solver"]),
-        smoother=SmootherConfig(**config_dict["smoother"]),
-        output=OutputConfig(**config_dict["output"]),
-    )
-
-
-def __assert_minimal_config__(config: dict) -> None:
-    """
-    Assert that the minimal configuration is present.
-    """
-    required_keys = [
-        "mesh",
-        "data_gen",
-        "model",
-        "optimization",
-        "training",
-        "coarsening",
-        "solver",
-        "smoother",
-        "output",
-    ]
-    for key in required_keys:
-        if key not in config:
-            raise ValueError(f"Missing required configuration section: {key}")
-
-
-def linear_encoder_decoder(config: Config) -> None:
+def linear_encoder_decoder(config: prs.Config) -> None:
     """
     Train a linear encoder-decoder model.
     Check the configuration file for more details.
@@ -443,7 +304,7 @@ def linear_encoder_decoder(config: Config) -> None:
 
 
 if __name__ == "__main__":
-    # args = __parse_args__()
-    # config = __parse_config__(args.config)
-    config = __parse_config__("configs/default.toml")  # use with NGSolve
+    # args = prs.ConfigLoader.parse_args()
+    # config = prs.ConfigLoader.parse_config(args.config)
+    config = prs.ConfigLoader.parse_config("configs/default.toml")
     linear_encoder_decoder(config)
