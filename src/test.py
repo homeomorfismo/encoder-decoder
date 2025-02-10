@@ -11,6 +11,7 @@ import optax
 import tensorflow.keras.datasets.mnist as mnist
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.sparse as sps
 import ngsolve as ng
 
 # local imports
@@ -19,6 +20,7 @@ import loss as fn
 import models as md
 import data_gen as dg
 import solver as slv
+import sparse as sp
 from geo2d import make_unit_square
 
 # Parameters
@@ -40,6 +42,8 @@ __SOLVER_ITER__: int = 1_000
 __SMOOTHER_TOL__: float = 1e-10
 __SMOOTHER_ITER__: int = 50
 __NUM_SAMPLES__: int = 8
+
+__NUM_CLUSTERS__: int = 3
 
 __ASSERT_TOL__: float = 1e-10
 
@@ -326,3 +330,18 @@ def test_tl_method():
         smoother_max_iter=__SMOOTHER_ITER__,
     )
     assert jnp.allclose(true_solution, computed_solution, atol=__ASSERT_TOL__)
+
+
+# Testing sparse.py
+def test_sparse_projector():
+    sparse_matrix = sps.csr_matrix(np.random.rand(__DIM__, __DIM__))
+    for agg_type in sp.AggregationType:
+        if agg_type == sp.AggregationType.BALANCED_LLOYD:
+            projector = sp.pyamg_get_sparsity_pattern_projector(
+                sparse_matrix, agg_type, num_clusters=__NUM_CLUSTERS__
+            )
+        else:
+            projector = sp.pyamg_get_sparsity_pattern_projector(
+                sparse_matrix, agg_type
+            )
+        print(f"\nProjector for {agg_type}:\n{projector[0].toarray()}")

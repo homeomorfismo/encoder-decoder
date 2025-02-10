@@ -47,24 +47,3 @@ def pyamg_get_sparsity_pattern_projector(
     except AttributeError:
         raise ValueError(f"Invalid aggregation type: {agg_type}")
     return aggregation_method(matrix, **kwargs)
-
-
-if __name__ == "__main__":
-    matrix = sp.csr_matrix(np.random.rand(__DIM__, __DIM__))
-    print(
-        f"\nMatrix shape: {matrix.shape}"
-        f"\nMatrix sparsity pattern:\n{matrix.toarray()}"
-    )
-
-    for agg_type in AggregationType:
-        if agg_type == AggregationType.BALANCED_LLOYD:
-            projector = pyamg_get_sparsity_pattern_projector(
-                matrix, agg_type, num_clusters=__NUM_CLUSTERS__
-            )
-        else:
-            projector = pyamg_get_sparsity_pattern_projector(matrix, agg_type)
-        print(
-            f"\n\t-> Aggregation type: {agg_type.name}"
-            f"\n\t-> Shape: {projector[0].shape}"
-            f"\n\t-> Sparsity pattern projector:\n{projector[0].toarray()}"
-        )
