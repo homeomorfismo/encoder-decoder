@@ -440,5 +440,5 @@ def linear_encoder_decoder(config: Config) -> None:
 if __name__ == "__main__":
     # args = __parse_args__()
     # config = __parse_config__(args.config)
-    config = __parse_config__("default.toml")  # use with NGSolve
+    config = __parse_config__("configs/default.toml")  # use with NGSolve
     linear_encoder_decoder(config)
