@@ -53,3 +53,4 @@ regularization = 0.001
 save_weights = false
 plot_weights = false
 strict_assert = true
+use_progress_bar = false

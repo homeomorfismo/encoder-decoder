@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import jax
 import jax.numpy as jnp
 import optax
+import tqdm
 from dataclasses import dataclass
 from typing import Any, Dict
 
@@ -89,6 +90,7 @@ class OutputConfig:
     save_weights: bool
     plot_weights: bool
     strict_assert: bool
+    use_progress_bar: bool
 
 
 @dataclass
@@ -195,6 +197,7 @@ def linear_encoder_decoder(config: Config) -> None:
     save_weights = config.output.save_weights
     plot_weights = config.output.plot_weights
     strict_assert = config.output.strict_assert
+    use_progress_bar = config.output.use_progress_bar
 
     print("\n->Creating mesh and data...")
     square = ng.Mesh(make_unit_square().GenerateMesh(maxh=maxh))
@@ -252,7 +255,8 @@ def linear_encoder_decoder(config: Config) -> None:
     n_batches = n_samples // batch_size
 
     # x_data.shape = (n_samples, n_fine)
-    for epoch in range(n_epochs):
+    epoch_range = tqdm.trange if use_progress_bar else range
+    for epoch in epoch_range(n_epochs):
         jax_key, k1 = jax.random.split(jax_key)
         permutation = jax.random.permutation(k1, n_samples)
         del k1
@@ -267,11 +271,12 @@ def linear_encoder_decoder(config: Config) -> None:
         (weights_encoder, weights_decoder), optimizer_state = carry
 
         mean_loss = jnp.mean(loss)
-        if epoch % freq == 0 or epoch == n_epochs - 1:
-            print(
-                f"\n\t-> Epoch {epoch+1}/{n_epochs}"
-                f"\n\t-> (Mean) Loss: {mean_loss:.10f}"
-            )
+        if not use_progress_bar:
+            if epoch % freq == 0 or epoch == n_epochs - 1:
+                print(
+                    f"\n\t-> Epoch {epoch+1}/{n_epochs}"
+                    f"\n\t-> (Mean) Loss: {mean_loss:.10f}"
+                )
         if strict_assert:
             assert not jnp.isnan(loss).any(), "Loss is NaN!"
 
