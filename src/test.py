@@ -255,6 +255,11 @@ def test_basic_conv_diff_data_gen():
     ng.Draw(mesh)
     ng.Draw(gfs)
 
+    gf = data_gen.get_gf()
+    gf.vec.FV().NumPy()[:] = samples_full_op[0]
+    lin_form_gf = data_gen.get_rhs(gf)
+    print(f"Type of lin_form_gf: {type(lin_form_gf)}")
+
 
 # Testing solver.py
 def test_forward_gauss_seidel() -> None:

@@ -6,13 +6,12 @@ import argparse
 import toml
 import ngsolve as ng
 import numpy as np
-import scipy as sp
 import plotly.graph_objects as go
 import jax
 import jax.numpy as jnp
 import optax
 from dataclasses import dataclass
-from typing import Tuple, Callable, Any, Dict, List
+from typing import Any, Dict
 
 # local imports
 import utilities as ut  # optimizers, initializers
@@ -317,9 +316,7 @@ def linear_encoder_decoder(config: Config) -> None:
     )
     grid_fun = conv_diff_dgen.get_gf(name="cos(xy) + sin(xy)")
     reconstr = conv_diff_dgen.get_gf(name="ED(cos(xy) + sin(xy))")
-    grid_fun.Set(
-        ng.cos(ng.x * ng.y) + ng.sin(ng.x * ng.y)
-    )  # cos(xy) + sin(xy)
+    grid_fun.Set(ng.cos(ng.x * ng.y) + ng.sin(ng.x * ng.y))
     ng.Draw(grid_fun, mesh=square, name="cos(xy) + sin(xy)")
 
     jax_grid_fun = jnp.array(grid_fun.vec.FV().NumPy(), dtype=jax_type)
@@ -330,7 +327,7 @@ def linear_encoder_decoder(config: Config) -> None:
     ng.Draw(reconstr, mesh=square, name="ED(cos(xy) + sin(xy))")
 
     # Compute NGSolve L2 error, assert close to zero
-    error = ng.sqrt(
+    error = np.sqrt(
         ng.Integrate(
             ng.InnerProduct(grid_fun - reconstr, grid_fun - reconstr) * ng.dx,
             square,
@@ -389,16 +386,18 @@ def linear_encoder_decoder(config: Config) -> None:
     )
     rhs_grid_fun = conv_diff_dgen.get_gf(name="rhs")
     rhs_grid_fun.Set(
-        2 * (ng.x * (1 - ng.x) + ng.y * (1 - ng.y))
-        + ng.x * (1 - ng.x) * ng.y * (1 - ng.y)
+        2.0 * (ng.x * (1.0 - ng.x) + ng.y * (1.0 - ng.y))
+        + ng.x * (1.0 - ng.x) * ng.y * (1.0 - ng.y)
     )
-    rhs = jnp.array(rhs_grid_fun.vec.FV().NumPy(), dtype=jax_type)
+    rhs = conv_diff_dgen.get_rhs(rhs_grid_fun)
 
-    jax_reconstr = slv.encoder_decoder_tl(
+    jax_solution = jnp.array(np.random.rand(n_fine), dtype=jax_type)
+    jax_solution = slv.encoder_decoder_tl(
         fine_operator,
         coarse_operator,
         fine_to_coarse.T,
         coarse_to_fine.T,
+        jax_solution,
         rhs,
         solver_tol=solver_tol,
         solver_max_iter=solver_max_iter,
@@ -407,17 +406,17 @@ def linear_encoder_decoder(config: Config) -> None:
     )
 
     solution = conv_diff_dgen.get_gf(name="TL(x * (1 - x) * y * (1 - y))")
-    solution.vec.FV().NumPy()[:] = jax_reconstr
+    solution.vec.FV().NumPy()[:] = jax_solution
 
     # Compute NGSolve L2 error, assert close to zero
     exact_grid_fun = conv_diff_dgen.get_gf(name="u(x,y)")
-    exact_grid_fun.Set(ng.x * (1 - ng.x) * ng.y * (1 - ng.y))
+    exact_grid_fun.Set(ng.x * (1.0 - ng.x) * ng.y * (1.0 - ng.y))
 
     ng.Draw(rhs_grid_fun, mesh=square, name="rhs")
     ng.Draw(exact_grid_fun, mesh=square, name="u(x,y)")
     ng.Draw(solution, mesh=square, name="TL(x * (1 - x) * y * (1 - y))")
 
-    error = ng.sqrt(
+    error = np.sqrt(
         ng.Integrate(
             ng.InnerProduct(
                 solution - exact_grid_fun, solution - exact_grid_fun

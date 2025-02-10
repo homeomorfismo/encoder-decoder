@@ -77,8 +77,34 @@ class DataGenerator(ABC):
         """
         pass
 
+    def get_rhs(
+        self,
+        rhs_gf: ng.GridFunction,
+    ) -> jnp.ndarray:
+        """
+        Get the right-hand side of the data generator.
+
+        Args:
+            rhs_gf: ng.GridFunction
+                Right-hand side GridFunction.
+
+        Returns:
+            jnp.ndarray
+                Right-hand side data.
+        """
+        lf_rhs = ng.LinearForm(self.space)
+        _, v = self.space.TnT()
+        lf_rhs += rhs_gf * v * ng.dx
+        lf_rhs.Assemble()
+        return jnp.array(
+            lf_rhs.vec.FV().NumPy(),
+            dtype=jnp.complex128 if self.is_complex else jnp.float64,
+        )
+
     def get_gf(
-        self, name: str = "gf", dim: Union[None, int] = None
+        self,
+        name: str = "gf",
+        dim: Union[None, int] = None,
     ) -> ng.GridFunction:
         """
         Get a GridFunction for the data generator.
