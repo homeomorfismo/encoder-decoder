@@ -55,6 +55,14 @@ class CoarseningConfig:
 
 
 @dataclass
+class AggregationConfig:
+    aggregation_type: str
+    strength_type: str
+    strength_kwargs: Dict[str, Any]
+    aggregation_kwargs: Dict[str, Any]
+
+
+@dataclass
 class SolverConfig:
     solver_tol: float
     solver_max_iter: int
@@ -82,6 +90,7 @@ class Config:
     optimization: OptimizationConfig
     training: TrainingConfig
     coarsening: CoarseningConfig
+    aggregation: AggregationConfig
     solver: SolverConfig
     smoother: SmootherConfig
     output: OutputConfig
@@ -119,6 +128,7 @@ class ConfigLoader:
             optimization=OptimizationConfig(**config_dict["optimization"]),
             training=TrainingConfig(**config_dict["training"]),
             coarsening=CoarseningConfig(**config_dict["coarsening"]),
+            aggregation=AggregationConfig(**config_dict["aggregation"]),
             solver=SolverConfig(**config_dict["solver"]),
             smoother=SmootherConfig(**config_dict["smoother"]),
             output=OutputConfig(**config_dict["output"]),
@@ -136,6 +146,7 @@ class ConfigLoader:
             "optimization",
             "training",
             "coarsening",
+            "aggregation",
             "solver",
             "smoother",
             "output",

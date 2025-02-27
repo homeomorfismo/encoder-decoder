@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 import jax
 import jax.numpy as jnp
 import scipy.sparse as sp
+import numpy as np
 import ngsolve as ng
 import pickle as pkl
 from typing import Tuple, Union
@@ -230,6 +231,11 @@ class BasicConvDiffDataGen(DataGenerator):
 
         self.space = fes
         a_row, a_col, a_val = a.mat.COO()
+        # csr matrix
+        self.sparse_operator = sp.csr_matrix(
+            (np.abs(a_val), (a_row, a_col)),
+            shape=(a.mat.height, a.mat.width),
+        )
         self.operator = jnp.array(
             sp.csr_matrix(
                 (a_val, (a_row, a_col)),

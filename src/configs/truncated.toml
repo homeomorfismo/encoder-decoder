@@ -1,11 +1,11 @@
 [mesh]
-maxh = 0.1
+maxh = 0.05
 
 [data_gen]
 tol = 1e-10
 iterations = 50
 is_complex = false
-n_samples = 5_000
+n_samples = 6_000
 use_restricted_operator = false
 
 [model]
@@ -16,6 +16,7 @@ init_decoder_type = "glorot_uniform"
 
 [model.init_encoder_kwargs]
 # Here we can specify the kwargs for the encoder initialization
+# value = 1.0
 
 [model.init_decoder_kwargs]
 # Here we can specify the kwargs for the decoder initialization
@@ -23,12 +24,12 @@ init_decoder_type = "glorot_uniform"
 
 [optimization]
 optimizer_type = "adam"
-ord = 2
-reg = 0.05
+ord = 1
+reg = 0.001
 
 [optimization.optimizer_kwargs]
 # Here we can specify the kwargs for the optimizer
-learning_rate = 0.0005
+learning_rate = 0.005
 
 [training]
 n_epochs = 500
@@ -47,7 +48,24 @@ smoother_max_iter = 50
 # "dec-dec", "dec-enc", "enc-enc", "enc-dec"
 coarsening_type = "enc-enc"
 use_restricted_operator = true
-regularization = 0.001
+regularization = 0.0001
+
+[aggregation]
+# "symmetric", "classical", "energy_based", "algebraic", "affinity"
+strength_type = "algebraic"
+# "standard", "naive", "lloyd", "balanced_lloyd"
+aggregation_type = "balanced_lloyd"
+
+[aggregation.strength_kwargs]
+# Here we can specify the kwargs for the strength matrix computation
+alpha = 0.05
+R = 50
+k = 2
+epsilon = 10.0
+
+[aggregation.aggregation_kwargs]
+# Here we can specify the kwargs for the aggregation
+num_clusters = 300
 
 [output]
 save_weights = false

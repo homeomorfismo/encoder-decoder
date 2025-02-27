@@ -12,16 +12,15 @@ from enum import Enum
 import scipy.sparse as sp
 import pyamg.aggregation as agg
 import pyamg.strength as strength
-import numpy as np
 from typing import Any
 
 
 class AggregationType(Enum):
-    STANDARD = "standard_aggregation"
-    NAIVE = "naive_aggregation"
-    # PAIRWISE = "pairwise_aggregation"
-    LLOYD = "lloyd_aggregation"
-    BALANCED_LLOYD = "balanced_lloyd_aggregation"
+    STANDARD = "standard"
+    NAIVE = "naive"
+    # PAIRWISE = "pairwise"
+    LLOYD = "lloyd"
+    BALANCED_LLOYD = "balanced_lloyd"
 
 
 class StrengthOfConnectionType(Enum):
@@ -54,7 +53,8 @@ def strength_of_connection(
             StrengthOfConnectionType.AFFINITY,
         ]:
             strength_method = getattr(
-                strength, strength_type.value + "_distance"
+                strength,
+                strength_type.value + "_distance",
             )
         else:
             strength_method = getattr(
@@ -84,7 +84,7 @@ def aggregation_matrix(
     - scipy.sparse.csr_matrix: Sparse matrix that maps fine dofs to coarse dofs.
     """
     try:
-        aggregation_method = getattr(agg, agg_type.value)
+        aggregation_method = getattr(agg, agg_type.value + "_aggregation")
     except AttributeError:
         raise ValueError(f"Invalid aggregation type: {agg_type}")
     return aggregation_method(matrix, **kwargs)
