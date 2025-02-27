@@ -14,6 +14,8 @@ import numpy as np
 import scipy.sparse as sps
 import ngsolve as ng
 
+# import pyamg.gallery as amgex
+
 # local imports
 import utilities as ut  # optimizers, initializers
 import loss as fn
@@ -333,15 +335,27 @@ def test_tl_method():
 
 
 # Testing sparse.py
+def test_strength_of_connection():
+    matrix = sps.csr_matrix(np.random.rand(__DIM__, __DIM__))
+    for strength_type in sp.StrengthOfConnectionType:
+        strength_matrix = sp.strength_of_connection(matrix, strength_type)
+        print(
+            f"\nStrength matrix for {strength_type}:\n{strength_matrix.toarray()}"
+        )
+
+
 def test_sparse_projector():
     sparse_matrix = sps.csr_matrix(np.random.rand(__DIM__, __DIM__))
+    soc_matrix = sp.strength_of_connection(
+        sparse_matrix, sp.StrengthOfConnectionType.CLASSICAL
+    )
     for agg_type in sp.AggregationType:
         if agg_type == sp.AggregationType.BALANCED_LLOYD:
-            projector = sp.pyamg_get_sparsity_pattern_projector(
-                sparse_matrix, agg_type, num_clusters=__NUM_CLUSTERS__
+            projector = sp.aggregation_matrix(
+                soc_matrix,
+                agg_type,
+                num_clusters=__NUM_CLUSTERS__,
             )
         else:
-            projector = sp.pyamg_get_sparsity_pattern_projector(
-                sparse_matrix, agg_type
-            )
+            projector = sp.aggregation_matrix(soc_matrix, agg_type)
         print(f"\nProjector for {agg_type}:\n{projector[0].toarray()}")
