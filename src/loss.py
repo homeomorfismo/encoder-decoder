@@ -5,18 +5,19 @@ using JAX.
 
 import jax.numpy as jnp
 from jax import jit
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 
 # local imports
 from models import LinearEncoderDecoder, MGLinearEncoderDecoder
 
 
-def get_loss(ord: Union[int, float, str, None]) -> Callable:
+def get_loss(ord: Optional[Union[int, float, str]]) -> Callable:
     """
     Get the loss function based on the specified type.
 
     Args:
-    - ord (Union[int, float, jnp.inf, -jnp.inf, 'fro', 'nuc', None]): The type of loss function to use.
+    - ord (Optional[Union[int, float, str]]): The type of loss function to use.
+    (int, float, 'fro', 'nuc', -jnp.inf, jnp.inf, None)
 
     Returns:
     - Callable: The JAX loss function.
@@ -61,12 +62,13 @@ def get_loss(ord: Union[int, float, str, None]) -> Callable:
     return loss
 
 
-def get_mg_loss(ord: Union[int, float, str, None]) -> Callable:
+def get_mg_loss(ord: Optional[Union[int, float, str]]) -> Callable:
     """
     Get the loss function based on the specified type.
 
     Args:
-    - ord (Union[int, float, inf, -inf, 'fro', 'nuc', None]): The type of loss function to use.
+    - ord (Optional[Union[int, float, str]]): The type of loss function to use.
+    (int, float, 'fro', 'nuc', -jnp.inf, jnp.inf, None)
 
     Returns:
     - Callable: The JAX loss function.
@@ -87,7 +89,7 @@ def get_mg_loss(ord: Union[int, float, str, None]) -> Callable:
         """
         reconstr_loss = jnp.mean(
             jnp.dot(
-                x
+                jnp.dot(x, range_weights.T)
                 - MGLinearEncoderDecoder(
                     x, encoder_weights, decoder_weights, range_weights
                 ),

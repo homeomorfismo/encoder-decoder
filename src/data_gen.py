@@ -237,10 +237,8 @@ class BasicConvDiffDataGen(DataGenerator):
             shape=(a.mat.height, a.mat.width),
         )
         self.operator = jnp.array(
-            sp.csr_matrix(
-                (a_val, (a_row, a_col)),
-                shape=(a.mat.height, a.mat.width),
-            ).todense()
+            self.sparse_operator.todense(),
+            dtype=jnp.complex128 if is_complex else jnp.float64,
         )
         self.free_dofs = jnp.array(list(fes.FreeDofs()), dtype=jnp.bool_)
         self.rest_operator = self.operator.at[~self.free_dofs, :].set(0)

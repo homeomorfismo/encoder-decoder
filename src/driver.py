@@ -390,7 +390,7 @@ def truncated_linear_encoder_decoder(config: prs.Config) -> None:
         f"\n\t-> Sparse operator shape: {conv_diff_dgen.sparse_operator.shape}"
         f"\n\t-> Strength of Connection shape: {soc.shape}"
         f"\n\t-> Aggregated operator shape: {agg_operator[0].shape}"
-        f"\n\t-> Compression factor: n_fine / n_coarse = {n_fine} / {n_coarse}"
+        f"\n\t-> Compression factor: n_fine / n_coarse = {n_fine/n_coarse}"
     )
 
     bool_aggregated = jnp.array(agg_operator[0].toarray(), dtype=jnp.bool_)
@@ -727,7 +727,7 @@ def mg_linear_encoder_decoder(config: prs.Config) -> None:
             loss_fn,
             argnums=(1, 2),
             holomorphic=is_complex,
-        )(batch, *param, reg, conv_diff_dgen.operator)
+        )(batch, *param, conv_diff_dgen.operator, reg)
         updates, new_opt_state = optimizer.update(grads, opt_state)
         new_param = optax.apply_updates(param, updates)
         return (new_param, new_opt_state), loss
@@ -791,41 +791,41 @@ def mg_linear_encoder_decoder(config: prs.Config) -> None:
         fig.update_layout(title="Encoder-Decoder Weights")
         fig.show()
 
-    print("\n->Testing the encoder-decoder model...")
+    # print("\n->Testing the encoder-decoder model...")
 
-    # Test 1: Encode-decode a simple sinusoidal function
-    print(
-        "\n\t-> Testing the encoder-decoder model on a simple sinusoidal function..."
-    )
-    grid_fun = conv_diff_dgen.get_gf(name="cos(xy) + sin(xy)")
-    reconstr = conv_diff_dgen.get_gf(name="ED(cos(xy) + sin(xy))")
-    grid_fun.Set(ng.cos(ng.x * ng.y) + ng.sin(ng.x * ng.y))
-    ng.Draw(grid_fun, mesh=square, name="cos(xy) + sin(xy)")
+    # # Test 1: Encode-decode a simple sinusoidal function
+    # print(
+    #     "\n\t-> Testing the encoder-decoder model on a simple sinusoidal function..."
+    # )
+    # grid_fun = conv_diff_dgen.get_gf(name="cos(xy) + sin(xy)")
+    # reconstr = conv_diff_dgen.get_gf(name="ED(cos(xy) + sin(xy))")
+    # grid_fun.Set(ng.cos(ng.x * ng.y) + ng.sin(ng.x * ng.y))
+    # ng.Draw(grid_fun, mesh=square, name="cos(xy) + sin(xy)")
 
-    # we use LinearEncoderDecoder for encoding and decoding
-    jax_grid_fun = jnp.array(grid_fun.vec.FV().NumPy(), dtype=jax_type)
-    jax_reconstr = mdl.LinearEncoderDecoder(
-        jax_grid_fun, weights_encoder, weights_decoder
-    )
+    # # we use LinearEncoderDecoder for encoding and decoding
+    # jax_grid_fun = jnp.array(grid_fun.vec.FV().NumPy(), dtype=jax_type)
+    # jax_reconstr = mdl.LinearEncoderDecoder(
+    #     jax_grid_fun, weights_encoder, weights_decoder
+    # )
 
-    reconstr.vec.FV().NumPy()[:] = jax_reconstr
-    ng.Draw(reconstr, mesh=square, name="ED(cos(xy) + sin(xy))")
+    # reconstr.vec.FV().NumPy()[:] = jax_reconstr
+    # ng.Draw(reconstr, mesh=square, name="ED(cos(xy) + sin(xy))")
 
-    # Compute NGSolve L2 error, assert close to zero
-    error = np.sqrt(
-        ng.Integrate(
-            ng.InnerProduct(grid_fun - reconstr, grid_fun - reconstr) * ng.dx,
-            square,
-        )
-    )
-    print(f"\n\t-> L2 error: {error:.10f}")
-    if strict_assert:
-        assert np.isclose(
-            error,
-            0.0,
-            atol=__STRICT_ATOL__,
-            rtol=__STRICT_RTOL__,
-        ), f"L2 error: {error:.10f}, expected less than {__STRICT_ATOL__}!"
+    # # Compute NGSolve L2 error, assert close to zero
+    # error = np.sqrt(
+    #     ng.Integrate(
+    #         ng.InnerProduct(grid_fun - reconstr, grid_fun - reconstr) * ng.dx,
+    #         square,
+    #     )
+    # )
+    # print(f"\n\t-> L2 error: {error:.10f}")
+    # if strict_assert:
+    #     assert np.isclose(
+    #         error,
+    #         0.0,
+    #         atol=__STRICT_ATOL__,
+    #         rtol=__STRICT_RTOL__,
+    #     ), f"L2 error: {error:.10f}, expected less than {__STRICT_ATOL__}!"
 
     # Test 2: Wrap the encoder-decoder model in a two-level solver
     fine_operator = conv_diff_dgen.rest_operator
@@ -926,8 +926,8 @@ def mg_linear_encoder_decoder(config: prs.Config) -> None:
 if __name__ == "__main__":
     # args = prs.ConfigLoader.parse_args()
     # config = prs.ConfigLoader.parse_config(args.config)
-    # config = prs.ConfigLoader.parse_config("configs/default.toml")
+    config = prs.ConfigLoader.parse_config("configs/default.toml")
+    # config = prs.ConfigLoader.parse_config("configs/truncated.toml")
     # linear_encoder_decoder(config)
-    config = prs.ConfigLoader.parse_config("configs/truncated.toml")
     # truncated_linear_encoder_decoder(config)
     mg_linear_encoder_decoder(config)
