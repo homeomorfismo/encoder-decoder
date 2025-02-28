@@ -16,6 +16,7 @@ init_decoder_type = "glorot_uniform"
 
 [model.init_encoder_kwargs]
 # Here we can specify the kwargs for the encoder initialization
+# value = 1.0
 
 [model.init_decoder_kwargs]
 # Here we can specify the kwargs for the decoder initialization
@@ -48,6 +49,23 @@ smoother_max_iter = 50
 coarsening_type = "enc-enc"
 use_restricted_operator = true
 regularization = 0.001
+
+[aggregation]
+# "symmetric", "classical", "energy_based", "algebraic", "affinity"
+strength_type = "algebraic"
+# "standard", "naive", "lloyd", "balanced_lloyd"
+aggregation_type = "balanced_lloyd"
+
+[aggregation.strength_kwargs]
+# Here we can specify the kwargs for the strength matrix computation
+alpha = 0.05
+R = 50
+k = 2
+epsilon = 10.0
+
+[aggregation.aggregation_kwargs]
+# Here we can specify the kwargs for the aggregation
+num_clusters = 300
 
 [output]
 save_weights = false
