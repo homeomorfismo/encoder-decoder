@@ -20,6 +20,7 @@ import ngsolve as ng
 import utilities as ut  # optimizers, initializers
 import loss as fn
 import models as md
+import sparse_models as spmd
 import data_gen as dg
 import solver as slv
 import sparse as sp
@@ -27,6 +28,7 @@ from geo2d import make_unit_square
 
 # Parameters
 __DIM__: int = 10
+__NNZ__: int = 5
 __REG__: float = 0.1
 __ORD_TYPES__: list = [0, 1, 2, jnp.inf, -jnp.inf, "fro", "nuc"]
 
@@ -359,3 +361,25 @@ def test_sparse_projector():
         else:
             projector = sp.aggregation_matrix(soc_matrix, agg_type)
         print(f"\nProjector for {agg_type}:\n{projector[0].toarray()}")
+
+
+# Testing sparse_models.py
+def test_sparse_linear_layer():
+    x = jnp.array(np.ones(__DIM__))
+    weights_data = jnp.array(list(range(1, __NNZ__ + 1)), dtype=jnp.float32)
+    weights_col_idx = jnp.array(list(range(__NNZ__)))
+    weights_row_ptr = jnp.array(
+        list(range(__NNZ__ + 1)) + (__DIM__ - __NNZ__) * [__NNZ__]
+    )
+    bias = jnp.zeros(__DIM__)
+
+    print(f"CSC Matrix:\n{weights_data}\n{weights_col_idx}\n{weights_row_ptr}")
+    y = spmd.SparseLinearLayer(
+        x, weights_data, weights_col_idx, weights_row_ptr, bias
+    )
+    print(f"\nInput of SparseLinearLayer:\n{x}")
+    print(f"\nOutput of SparseLinearLayer:\n{y}")
+
+
+if __name__ == "__main__":
+    test_sparse_linear_layer()
